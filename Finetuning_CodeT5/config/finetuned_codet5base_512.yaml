@@ -1,0 +1,47 @@
+# Copyright (c) ServiceNow and its affiliates.
+# All rights reserved.
+# 
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
+logging_strategy: steps
+logging_steps: 200
+save_strategy: steps
+save_steps: 1000
+save_total_limit: 3
+evaluation_strategy: steps
+eval_steps: 1000
+metric_for_best_model: em_first_line_ratio
+greater_is_better: True
+predict_with_generate: True
+include_inputs_for_metrics: True
+fp16: True
+report_to: tensorboard
+dataloader_num_workers: 6
+
+append_special_token_to_input:
+
+min_encoder_seq_length: 0
+min_decoder_seq_length: 0
+encoder_seq_length: 512
+decoder_seq_length: 512
+eval_generate_seq_length: 100
+evel_generate_use_eol_stop_tokens: True
+
+# if wold have been perfect 4e-6 and several epochs
+num_train_epochs: 1
+# True batch: per_gpu_batch_size * n_gpu * gradient_accumulation_steps
+gradient_accumulation_steps: 2
+per_device_train_batch_size: 32
+per_device_eval_batch_size: 32
+learning_rate: 4.0e-5 
+lr_scheduler_type: linear
+warmup_steps: 100
+weight_decay: 0.05
+
+# metric computation params
+strip_new_lines_for_em: False
+
+# Debug options
+debug: False
+

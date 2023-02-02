@@ -1,0 +1,91 @@
+# Copyright (c) ServiceNow and its affiliates.
+# All rights reserved.
+# 
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
+# Data preparation params
+filename_1K_20plus_file_list: Finetuning_CodeT5/1K_20plus_file_list.parquet
+filename_the_stack11_dedup_alt_comments: bigcode/stack-dedup-alt-comments
+path_java_filtered_subset_root:  /repo_data/the_stack11_dedup_alt_comments_no_1K_set_subset
+java_filtered_subset_data_dir: data
+java_filtered_subset_pivots_dir: pivots
+repo_names_rand_seq_filename: repo_names_rand_seq.json
+splits_filename: splits_repo_names.json
+regenerate: False
+min_file_count_per_repo: 20
+pivots_per_file: 10
+max_pivots_per_repository: 10000
+bucket_size: 400000
+# -1 means all the remained data left after validation and test splits
+train_size: -1
+validation_size: 100000
+test_size: 100000
+num_proc: 8
+seed: 42
+
+
+# Model params
+add_max_padding: False
+
+
+# These params are for alternative format of the dataset then pivot/holes points are
+# already processed and are in the same dataset, not used in default pipeline
+dataset_format_separate_data_pivot_points: True
+dataset_file: /repo_data/repo_preprocessed_data/medium_eval_prior_contexts.json
+dataset_cache_dir: /repo_data/hf_datasets_cashe
+
+eval_not_trained: True
+base_model_name: Salesforce/codet5-base
+trained_model_name: codet5-base-ntp-java
+model_dir_base: /repo_data/finetuning_checkpoints
+empty_model_dir: False
+# the split name must match between data and pivots
+training_split: train
+training_max_samples_count: -1
+eval_split: validation
+eval_max_samples_count: 10000
+
+logging_strategy: steps
+logging_steps: 100
+save_strategy: steps
+save_steps: 1000
+save_total_limit: 3
+evaluation_strategy: steps
+eval_steps: 1000
+metric_for_best_model: em_first_line_ratio
+greater_is_better: True
+predict_with_generate: True
+include_inputs_for_metrics: True
+fp16: True
+report_to: tensorboard
+dataloader_num_workers: 4
+
+append_special_token_to_input:
+
+min_encoder_seq_length: 0
+min_decoder_seq_length: 0
+encoder_seq_length: 512
+decoder_seq_length: 512
+eval_generate_seq_length: 100
+evel_generate_use_eol_stop_tokens: True
+
+num_train_epochs: 1
+# True batch: per_gpu_batch_size * n_gpu * gradient_accumulation_steps
+gradient_accumulation_steps: 1
+per_device_train_batch_size: 8
+per_device_eval_batch_size: 8
+learning_rate: 4.0e-5 
+lr_scheduler_type: linear
+warmup_steps: 100
+weight_decay: 0.01
+
+# metric computation params
+strip_new_lines_for_em: True
+
+# Debug options
+debug: False
+overfit_split: validation
+overfit_split_size: 10
+is_overfit_split_eval_as_train: True
+overfit_split_size_eval: 10
