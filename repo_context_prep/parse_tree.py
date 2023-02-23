@@ -155,7 +155,7 @@ def get_import_path(import_stat, file):
       index_pos = len(file_path_parts) - file_path_parts[::-1].index(import_path_part) - 1
       absolute_import_path = file_path_parts[:index_pos] + import_path_parts
     except ValueError as e:
-      print('')
+      print('Error parsing import path: ', import_stat_str, file)
   #print(absolute_import_path)
   if absolute_import_path:
     import_path = '/'.join(absolute_import_path)
@@ -245,9 +245,9 @@ def setup_args():
   parser = argparse.ArgumentParser()
 
   parser.add_argument("--seed", type=int, default=9, help="seed for reproducibility")
-  parser.add_argument("--base_dir", type=str, default='rule_classifier_data/test', \
+  parser.add_argument("--base_dir", type=str, default='/repo_data/repo_preprocessed_data/train', \
                             help="base directory for the data")
-  parser.add_argument("--proj_name", type=str, default='wicketbits', \
+  parser.add_argument("--proj_name", type=str, default='phongcui1510', \
                             help="name of the input repo")
 
   return parser.parse_args()
