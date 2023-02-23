@@ -87,7 +87,8 @@ class getAllRulesContexts():
                 post_end = (post_end_line, len(file_lines[post_end_line])) 
                 post_hole_context = get_string(file, post_start, post_end)
         hole_context = post_hole_context + " " + pre_hole_context
-        return hole_context
+        target_hole = file_lines[hole_pos[0]][hole_pos[1]:]
+        return hole_context, target_hole
 
     def get_rule_contexts(self, file, hole_pos):
         file_lines = open(file, encoding="utf8", errors='backslashreplace').readlines()
@@ -182,7 +183,7 @@ if __name__ == '__main__':
                 # if total_count%100 == 0:
                 #     print("Total Holes:", total_count)
                 hole_pos = (l, c)
-                hole_context = all_rule_context_obj.get_hole_context(file, hole_pos)
+                hole_context, target_hole = all_rule_context_obj.get_hole_context(file, hole_pos)
                 rule_contexts, rule_context_locations = all_rule_context_obj.get_rule_contexts(file, hole_pos)
                 # print("Hole context: ", hole_context)
                 # print("Last Rule Context", rule_contexts[-1])
