@@ -1,0 +1,12 @@
+name: experiment1
+model_name: codet5
+checkpoint_dir: /home/toolkit/checkpoints1/repo_training_codellm
+model_path: none
+per_gpu_batch_size: 1
+maxload: 10
+local_rank: -1
+main_port: 8080
+seed: 42
+eval_freq: 1
+save_freq: 1
+eval_print_freq: 1
