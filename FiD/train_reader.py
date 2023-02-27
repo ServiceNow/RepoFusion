@@ -20,10 +20,11 @@ import src.data
 import src.model
 
 
-def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, collator, best_dev_em, checkpoint_path):
+def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, collator, best_dev_em, checkpoint_path, tokenizer, logger):
 
     if opt.is_main:
         try:
+            import torch.utils.tensorboard
             tb_logger = torch.utils.tensorboard.SummaryWriter(Path(opt.checkpoint_dir)/opt.name)
         except:
             tb_logger = None
@@ -124,13 +125,7 @@ def evaluate(model, dataset, tokenizer, collator, opt):
     exactmatch, total = src.util.weighted_average(np.mean(exactmatch), total, opt)
     return exactmatch
 
-if __name__ == "__main__":
-    options = Options()
-    options.add_reader_options()
-    options.add_optim_options()
-    opt = options.parse()
-    #opt = options.get_options(use_reader=True, use_optim=True)
-
+def run(opt):
     torch.manual_seed(opt.seed)
     src.slurm.init_distributed_mode(opt)
     src.slurm.init_signal_handler()
@@ -150,7 +145,7 @@ if __name__ == "__main__":
         checkpoint_path / 'run.log'
     )
 
-    model_name = 't5-' + opt.model_size
+    model_name = opt.model_name + '-' +opt.model_size
     model_class = src.model.FiDT5
 
     #load data
@@ -210,5 +205,17 @@ if __name__ == "__main__":
         opt,
         collator,
         best_dev_em,
-        checkpoint_path
+        checkpoint_path,
+        tokenizer,
+        logger
     )
+
+if __name__ == "__main__":
+    options = Options()
+    options.add_reader_options()
+    options.add_optim_options()
+    opt = options.parse()
+    #opt = options.get_options(use_reader=True, use_optim=True)
+    
+    run(opt)
+    
