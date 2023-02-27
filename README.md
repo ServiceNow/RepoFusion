@@ -17,6 +17,9 @@ Also needed to uninstall tokenizer and transformers from conda foerge and instal
 Install jupyter lab
 
 
+Install `pip install ConfigArgParse`
+ 
+
 ## Run lab session in research-interactive-toolkit
 ```
 export PYTHONPATH=/home/toolkit/code/

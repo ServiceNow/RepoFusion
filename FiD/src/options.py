@@ -4,7 +4,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-import argparse
+import configargparse
 import os
 from pathlib import Path
 import logging
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class Options():
     def __init__(self):
-        self.parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        self.parser = configargparse.ArgParser(formatter_class=configargparse.ArgumentDefaultsHelpFormatter)
         self.initialize_parser()
 
     def add_optim_options(self):
@@ -67,6 +67,7 @@ class Options():
 
 
     def initialize_parser(self):
+        self.parser.add('-c', '--config', required=False, is_config_file=True, help='config file path')
         # basic parameters
         self.parser.add_argument('--name', type=str, default='experiment_name', help='name of the experiment')
         self.parser.add_argument('--checkpoint_dir', type=str, default='./checkpoint/', help='models are saved here')
@@ -109,8 +110,8 @@ class Options():
 
         logger.info(message)
 
-    def parse(self):
-        opt = self.parser.parse_args()
+    def parse(self, args=None):
+        opt = self.parser.parse_args(args)
         return opt
 
 
