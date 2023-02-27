@@ -17,7 +17,7 @@ Also needed to uninstall tokenizer and transformers from conda foerge and instal
 Install jupyter lab
 
 
-Install `pip install ConfigArgParse`
+Install `pip install ConfigArgParse SentencePiece`
  
 
 ## Run lab session in research-interactive-toolkit
