@@ -36,6 +36,7 @@ class Options():
                         help='save dataset with cross-attention scores')
 
     def add_reader_options(self):
+        self.parser.add_argument('--model_name', type=str, default='t5', help='model name without size')
         self.parser.add_argument('--train_data', type=str, default='none', help='path of train data')
         self.parser.add_argument('--eval_data', type=str, default='none', help='path of eval data')
         self.parser.add_argument('--model_size', type=str, default='base')
