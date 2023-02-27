@@ -3,7 +3,7 @@ checkpoint_dir: CHECKPOINT_DIR
 model_path: PER_GPU_BATCH_SIZE
 per_gpu_batch_size: 1
 maxload: 10
-local_rank: 0
+local_rank: -1
 main_port: 8080
 seed: 42
 eval_freq: 1
