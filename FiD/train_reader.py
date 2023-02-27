@@ -12,6 +12,7 @@ import numpy as np
 from pathlib import Path
 from torch.utils.data import DataLoader, RandomSampler, DistributedSampler, SequentialSampler
 from src.options import Options
+import multiprocessing
 
 import src.slurm
 import src.util
@@ -37,7 +38,7 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
         sampler=train_sampler,
         batch_size=opt.per_gpu_batch_size,
         drop_last=True,
-        num_workers=10,
+        num_workers=min(max(multiprocessing.cpu_count()-1, 1), 10),
         collate_fn=collator
     )
 
@@ -98,7 +99,7 @@ def evaluate(model, dataset, tokenizer, collator, opt):
         sampler=sampler,
         batch_size=opt.per_gpu_batch_size,
         drop_last=False,
-        num_workers=10,
+        num_workers=min(max(multiprocessing.cpu_count()-1, 1), 10),
         collate_fn=collator
     )
     model.eval()
@@ -147,9 +148,21 @@ def run(opt):
 
     model_name = opt.model_name + '-' +opt.model_size
     model_class = src.model.FiDT5
+    
+    # Get max model lenght
+    model_cfg = transformers.AutoConfig.from_pretrained(model_name)
+    if not (hasattr(model_cfg, 'n_positions') and hasattr(model_cfg, 'output_past')):
+        raise ValueError(f'Model {model_name} config has no n_positions and output_past')
 
+    model_max_length = opt.model_max_length
+    # Set it from opt?
+    output_past = bool(model_cfg.output_past)
+
+    if output_past is False and model_max_length > model_cfg.n_positions:
+        raise ValueError(f'max_model_length is bigger than n_positions for output_past == False')
+    
     #load data
-    tokenizer = transformers.T5Tokenizer.from_pretrained(model_name)
+    tokenizer = transformers.T5Tokenizer.from_pretrained(model_name, model_max_length=model_max_length)
     collator = src.data.Collator(opt.text_maxlength, tokenizer, answer_maxlength=opt.answer_maxlength)
 
     # use golbal rank and world size to split the eval set on multiple gpus
