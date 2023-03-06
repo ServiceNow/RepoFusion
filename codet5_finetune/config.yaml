@@ -1,0 +1,11 @@
+filename_1K_20plus_file_list: /data/hf_repos/the-stak-repo-level/meta_data/java/1K_20plus_file_list.parquet
+filename_the_stack11_dedup_alt_comments: /data/christmas_datasets/the_stack_dedup_alt_comments.jsonl
+path_java_filtered: /repo_data/the_stack11_dedup_alt_comments_no_1K_set/data
+path_java_filtered_subset: /repo_data/the_stack11_dedup_alt_comments_no_1K_set_subset/data
+
+bucket_size: 400000
+train_size: 300000
+validation_size: 15000
+test_size: 30000
+num_proc: 7
+seed: 42
