@@ -23,7 +23,7 @@ import src.model
 
 
 def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, collator, best_dev_em, checkpoint_path, tokenizer, logger):
-
+    global torch
     if opt.is_main:
         try:
             import torch.utils.tensorboard

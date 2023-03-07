@@ -51,8 +51,12 @@ def init_distributed_mode(params):
         - global_rank
         - world_size
     """
-    params.is_slurm_job = 'SLURM_JOB_ID' in os.environ 
+    params.is_slurm_job = 'SLURM_JOB_ID' in os.environ
+
+    if 'LOCAL_RANK' in os.environ:
+        params.local_rank = int(os.environ['LOCAL_RANK'])
     has_local_rank = hasattr(params, 'local_rank')
+    print(f'{params.local_rank=}')
 
     # SLURM job
     if params.is_slurm_job and has_local_rank:
@@ -110,6 +114,10 @@ def init_distributed_mode(params):
         params.global_rank = int(os.environ['RANK'])
         params.world_size = int(os.environ['WORLD_SIZE'])
         params.n_gpu_per_node = int(os.environ['NGPU'])
+
+        print(f'{params.global_rank=}')
+        print(f'{params.world_size=}')
+        print(f'{params.n_gpu_per_node=}')
 
         # number of nodes / node ID
         params.n_nodes = params.world_size // params.n_gpu_per_node
