@@ -11,7 +11,7 @@ def params():
     A placeholder for params to be replaces with actual arg parsing later
     '''
 
-    with open('config.yaml') as f:
+    with open('codet5_finetune/config.yaml') as f:
         data = yaml.safe_load(f)
     
     opt = type('Opt', (), data)()
