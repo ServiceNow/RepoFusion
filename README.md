@@ -18,6 +18,7 @@ Install jupyter lab
 
 
 Install `pip install ConfigArgParse SentencePiece`
+install 'conda install yq'
  
 
 ## Run lab session in research-interactive-toolkit
