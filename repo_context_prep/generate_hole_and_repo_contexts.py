@@ -1,4 +1,5 @@
 import os
+import json
 import pickle
 import argparse
 from utils import *
@@ -6,19 +7,26 @@ from context import *
 from rule_config import *
 from transformers import GPT2TokenizerFast
 
+rule_order = [5, 7, 6, 1, 20, 22, 2, 0, 25, 3, 23, 24, 28, 26, 4, 21, 62, 31, 27, 29, 30, 8, 34, 32, \
+              10, 33, 9, 35, 13, 11, 12, 36, 46, 44, 16, 14, 49, 45, 48, 40, 38, 19, 15, 18, 39, 43, 47,\
+               17, 42, 41, 58, 56, 57, 61, 59, 60, 37, 52, 50, 53, 55, 54, 51]
+
 class getAllRulesContexts():
-    def __init__(self, parse_data=None, tokenizer=None, rule_context_len=4072):
+    def __init__(self, parse_data=None, tokenizer=None, total_context_len=4072):
         super(getAllRulesContexts, self).__init__()
         self.parse_data = parse_data
-        self.rule_context_len = rule_context_len
+        self.total_context_len = total_context_len
         self.tokenizer = tokenizer
-        self.rules = list(combined_to_index.keys())
+        unsorted_rules = list(combined_to_index.keys())
+        self.rules = [unsorted_rules[i] for i in rule_order]
+        #print(self.rules)
         #print("Total # of Rules: ", len(self.rules))
 
-    def get_rule_prompt(self, rule_context_obj=None, context_location='in_file', context_len=4072, rule_triggered=False):
+    def get_rule_prompt(self, rule_context_obj=None, context_location = 'in_file', context_division_ratio=0.5):
 
-        # start by assigning half of the rule_context_len to the rule prompt
-        rule_context_obj.set_context_len(context_len)
+        rule_context_obj.set_context_len(self.total_context_len)
+        allocated_rule_context_len = int(rule_context_obj.get_context_len()*context_division_ratio)
+        rule_context_obj.set_context_len(allocated_rule_context_len)
 
         if context_location == 'in_file':
             rule_prompt, rule_prompt_len = rule_context_obj.get_in_file_context()
@@ -52,12 +60,12 @@ class getAllRulesContexts():
         #     rule_prompt, rule_prompt_len = rule_context_obj.get_bm25_context()
         return rule_prompt, rule_prompt_len
 
-    def get_default_prompt(self, hole_pos=(0,0), context_len=0, file=''):
+    def get_default_prompt(self, hole_pos=(0,0), file=''):
 
         default_context_obj = getContext(context_location='in_file',
                                     tokenizer=self.tokenizer,
                                     file=file,
-                                    context_len=context_len,
+                                    context_len=self.total_context_len,
                                     context_scope='pre',\
                                     context_type='lines',\
                                     top_k=-1)
@@ -66,7 +74,7 @@ class getAllRulesContexts():
         default_prompt, default_prompt_len = default_context_obj.get_line_context()
         return default_prompt, default_prompt_len
 
-    def get_hole_context(self, file, hole_pos, num_of_prev_lines=5, num_of_post_lines=5):
+    def get_hole_context(self, file, hole_pos, num_of_prev_lines=2, num_of_post_lines=2):
         file_lines = open(file, encoding="utf8", errors='backslashreplace').readlines()
         pre_end = hole_pos
         pre_start_line = hole_pos[0] - num_of_prev_lines
@@ -93,16 +101,14 @@ class getAllRulesContexts():
     def get_rule_contexts(self, file, hole_pos):
         file_lines = open(file, encoding="utf8", errors='backslashreplace').readlines()
         rule_contexts = []
-        rule_context_locations = []
         for i in range(len(self.rules)):
             rule = self.rules[i]
+            rule_score = 1/ (i + 1)
             if rule == 'codex':
-                rule_context, rule_context_len = self.get_default_prompt(
+                rule_context, _ = self.get_default_prompt(
                                         hole_pos=hole_pos,
-                                        context_len=rule_context_len,
                                         file=file
                                         )
-                cl = 'current_file'
             else:
                 cl, ct, cf = rule.split('#')
                 rule_specific_hyperparams = rule_hyperparams[ct]
@@ -117,13 +123,14 @@ class getAllRulesContexts():
                 is_out_file = rule_util.is_out_files()
                 if is_out_file or (not is_out_file and cl == 'in_file'):
                     rule_util.set_hole_pos(hole_pos)
-                    rule_context, rule_context_len = self.get_rule_prompt(rule_util, context_location=cl, context_len=self.rule_context_len)
+                    rule_context, _ = self.get_rule_prompt(rule_context_obj=rule_util, \
+                                                            context_location=cl, \
+                                                            context_division_ratio=float(cf))
                 else:
                     rule_context = ''
 
-            rule_contexts.append(rule_context)
-            rule_context_locations.append(cl)
-        return rule_contexts, rule_context_locations
+            rule_contexts.append({'title': rule, 'text': rule_context, 'score':rule_score})
+        return rule_contexts
 
 def setup_args():
   """
@@ -135,7 +142,7 @@ def setup_args():
   parser.add_argument("--base_dir", type=str, default='/repo_data/repo_preprocessed_data/', help="base directory for the data")
   parser.add_argument("--data_split", type=str, default='train', help="data split")
   parser.add_argument("--repo_name", type=str, default='wiverson', help="name of the repo")
-  parser.add_argument("--rule_context_len", type=int, default=2000, help="total size of the rule context")
+  parser.add_argument("--total_context_len", type=int, default=4072, help="total size of the rule context")
 
   return parser.parse_args()
 
@@ -157,11 +164,14 @@ if __name__ == '__main__':
     parsed_data_filename = os.path.join(input_data_dir, 'parsed_data')
     parse_data = pickle.load(open(parsed_data_filename, 'rb'))
     #get the holes
-    hole_filename = os.path.join(input_data_dir, 'hole_data')
+    hole_filename = os.path.join(input_data_dir, 'hole_data_mod')
     hole_data = pickle.load(open(hole_filename, 'rb'))
 
     # file for storing #empty rule contexts per hole.
     f = open(os.path.join(args.base_dir, "empty_rule_contexts.txt"), "a+")
+
+    # file for storing hole and rule contexts
+    f_out = open(os.path.join(input_data_dir, "hole_and_rule_contexts.json"), "w")
 
     # get all relevant files (in raw form)
     files = [os.path.join(dp, f) \
@@ -171,7 +181,7 @@ if __name__ == '__main__':
 
     all_rule_context_obj = getAllRulesContexts(parse_data=parse_data,\
                                             tokenizer=tokenizer, \
-                                            rule_context_len=args.rule_context_len)
+                                            total_context_len=args.total_context_len)
     print("Processing Repo: ", args.repo_name)
     total_count = 0
     # get the prompts for all files
@@ -180,23 +190,36 @@ if __name__ == '__main__':
             # print(file)
             # go through the holes in the file
             for (l,c) in hole_data[file]: # l = line no, c = character offset within line l
-                # if total_count%100 == 0:
-                #     print("Total Holes:", total_count)
+                if total_count %100==0:
+                    print("Total Holes:", total_count)
                 hole_pos = (l, c)
                 hole_context, target_hole = all_rule_context_obj.get_hole_context(file, hole_pos)
-                rule_contexts, rule_context_locations = all_rule_context_obj.get_rule_contexts(file, hole_pos)
+                rule_contexts = all_rule_context_obj.get_rule_contexts(file, hole_pos)
                 # print("Hole context: ", hole_context)
                 # print("Last Rule Context", rule_contexts[-1])
                 # print(len(rule_contexts))
-                empty_rule_contexts = [ x for x in rule_contexts if x == '' ]
+                empty_rule_contexts = [x for x in rule_contexts if x['text'] == '' ]
                 #print("Empty Rule Contexts:", len(empty_rule_contexts))
                 total_count += 1
                   # append to hole stats file
 
-            # data_split, repo_name, filename, #holes in the file, hole, #empty rule contexts
-            f.write(args.data_split + ", " + args.repo_name + ", " + file + ", " \
-                      + str(len(hole_data[file])) + ", " \
-                      + str(hole_pos) + ", " + str(len(empty_rule_contexts)))
-            f.write("\n")
+                entry = {
+                'id': total_count,
+                'question': hole_context,
+                'target': target_hole,
+                'answers': [target_hole],
+                'ctxs': rule_contexts,
+                }
+
+                f_out.write(json.dumps(entry))
+                f_out.write("\n")
+                f_out.flush()
+
+                # data_split, repo_name, filename, #holes in the file, hole, #empty rule contexts
+                f.write(args.data_split + ", " + args.repo_name + ", " + file + ", " \
+                        + str(len(hole_data[file])) + ", " \
+                        + str(hole_pos) + ", " + str(len(empty_rule_contexts)))
+                f.write("\n")
 
     f.close()
+    f_out.close()

@@ -3,7 +3,7 @@ import os
 import argparse
 import pickle
 '''
-For each line in the repo (which is not blank or comment) choose the midpoint of those lines (character wise not token wise) as hole position.
+For each line in the repo choose a random position (char-wise) as hole position.
 '''
 
 def choose_holes(project_lines, comments):
@@ -25,7 +25,6 @@ def choose_holes(project_lines, comments):
       else:
         chosen_lines.append(proj_line_id)
       count+=1
-      #get holes from the middle of the lines
       chosen_position = np.random.randint(0, len(line))
       # mid_point = int(len(line)/2)
       # chosen_position = mid_point
