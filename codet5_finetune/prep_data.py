@@ -6,17 +6,7 @@ from pathlib import Path
 import datasets
 import yaml
 
-def params():
-    '''
-    A placeholder for params to be replaces with actual arg parsing later
-    '''
-
-    with open('codet5_finetune/config.yaml') as f:
-        data = yaml.safe_load(f)
-    
-    opt = type('Opt', (), data)()
-    
-    return opt
+from codet5_finetune.options import options
 
 def get_java_files_remove_files_present_in_reconstructed_repos(opt):
     '''
@@ -65,15 +55,19 @@ def select_split(ds, opt):
     return ds
 
 
-def process(opt):
+def run(opt):
+    '''
+    Prepares data by taking filtered and deduplicated subset of The Stack 1.1
+    which was used to traind SantaCoder model, takes java files which have
+    not been used in recreation of the 1K repositories for repo level context
+    experiments
+    '''
     ds = get_java_files_remove_files_present_in_reconstructed_repos(opt)
     ds = select_split(ds, opt)
     ds.save_to_disk(opt.path_java_filtered_subset, num_proc=opt.num_proc)
 
 if __name__ == '__main__':
-    opt = params()
-    process(opt)
-    
-    
+    run(options())
+
     
         

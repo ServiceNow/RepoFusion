@@ -1,0 +1,34 @@
+# Data preparation params
+filename_1K_20plus_file_list: /data/hf_repos/the-stak-repo-level/meta_data/java/1K_20plus_file_list.parquet
+filename_the_stack11_dedup_alt_comments: /data/christmas_datasets/the_stack_dedup_alt_comments.jsonl
+path_java_filtered: /repo_data/the_stack11_dedup_alt_comments_no_1K_set/data
+path_java_filtered_subset: /repo_data/the_stack11_dedup_alt_comments_no_1K_set_subset/data
+bucket_size: 400000
+train_size: 300000
+validation_size: 15000
+test_size: 30000
+num_proc: 8
+seed: 42
+
+# Model params
+base_model_name: Salesforce/codet5-base
+trained_model_name: codet5-base-ntp-java
+experiment_name: tests
+model_dir_base: /repo_data/finetuning_checkpoints
+min_encoder_seq_length: 0
+min_decoder_seq_length: 0
+encoder_seq_length: 512
+decoder_seq_length: 512
+logging_strategy: steps
+logging_steps: 100
+save_strategy: steps
+save_steps: 200
+# if wold have been perfect 4e-6 and several epochs
+learning_rate: 4.0e-5 
+per_device_train_batch_size: 8
+per_device_eval_batch_size: 8
+weight_decay: 0.01
+save_total_limit: 3
+num_train_epochs: 1
+fp16: True
+report_to: tensorboard
