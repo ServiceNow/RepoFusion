@@ -4,6 +4,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 import time
 import sys
 import torch
@@ -50,6 +51,10 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
         for i, batch in enumerate(train_dataloader):
             step += 1
             (idx, labels, _, context_ids, context_mask) = batch
+            print("context_ids", context_ids.shape)
+            print("context_mask", context_mask.shape)
+            print("labels", labels.shape)
+            print("idx", idx.shape)
 
             train_loss = model(
                 input_ids=context_ids.cuda(),
@@ -67,6 +72,7 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
                 model.zero_grad()
 
             train_loss = src.util.average_main(train_loss, opt)
+            print("train_loss", train_loss)
             curr_loss += train_loss.item()
 
             if step % opt.eval_freq == 0:
@@ -148,7 +154,8 @@ def run(opt):
 
     model_name = opt.model_name + '-' +opt.model_size
     model_class = src.model.FiDT5
-    
+    print(opt.train_data, opt.eval_data, model_name, checkpoint_path)
+
     # Get max model lenght
     model_cfg = transformers.AutoConfig.from_pretrained(model_name)
     if not (hasattr(model_cfg, 'n_positions') and hasattr(model_cfg, 'output_past')):
@@ -162,7 +169,8 @@ def run(opt):
         raise ValueError(f'max_model_length is bigger than n_positions for output_past == False')
     
     #load data
-    tokenizer = transformers.T5Tokenizer.from_pretrained(model_name, model_max_length=model_max_length)
+    #tokenizer = transformers.T5Tokenizer.from_pretrained(model_name, model_max_length=model_max_length)
+    tokenizer = transformers.RobertaTokenizer.from_pretrained(model_name)
     collator = src.data.Collator(opt.text_maxlength, tokenizer, answer_maxlength=opt.answer_maxlength)
 
     # use golbal rank and world size to split the eval set on multiple gpus
@@ -171,13 +179,16 @@ def run(opt):
         global_rank=opt.global_rank, 
         world_size=opt.world_size,
     )
+    print("Loaded train data with a total of {} examples".format(len(train_examples)))
     train_dataset = src.data.Dataset(train_examples, opt.n_context)
+
     # use golbal rank and world size to split the eval set on multiple gpus
     eval_examples = src.data.load_data(
         opt.eval_data,
         global_rank=opt.global_rank,
         world_size=opt.world_size,
     )
+    print("Loaded eval data with a total of {} examples".format(len(eval_examples)))
     eval_dataset = src.data.Dataset(eval_examples, opt.n_context)
 
     if not checkpoint_exists and opt.model_path == "none":
