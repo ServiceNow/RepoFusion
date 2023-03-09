@@ -6,13 +6,15 @@ class DataCollatorNTP():
     def __init__(
         self, tokenizer,
         min_encoder_seq_length, min_decoder_seq_length,
-        encoder_seq_length, decoder_seq_length
+        encoder_seq_length, decoder_seq_length,
+        append_special_token_to_input=None
     ):
         self.tokenizer = tokenizer
         self.min_encoder_seq_length = min_encoder_seq_length
         self.min_decoder_seq_length = min_decoder_seq_length
         self.encoder_seq_length = encoder_seq_length
         self.decoder_seq_length = decoder_seq_length
+        self.append_special_token_to_input = append_special_token_to_input
         
     def __call__(self, examples, return_tensors="pt"):
         """
@@ -88,6 +90,15 @@ class DataCollatorNTP():
         pad_token_id = self.tokenizer.pad_token_id
         if pad_token_id is None:
             raise ValueError("The CodeT5 tokenizer should have a pad token.")
+            
+        if self.append_special_token_to_input is not None:
+            append_special_token_to_input_id = self.tokenizer.vocab[self.append_special_token_to_input]
+            encoder_seq_length -= 1
+            input_end = [append_special_token_to_input_id, eos_token_id]
+            attention_mask_end = [1, 1]
+        else:
+            input_end = [eos_token_id]
+            attention_mask_end = [1]
 
         # a column-wise representation of the examples is needed for the tokenizer.pad function
         example_dict: dict[str, list[list[int]]] = {}
@@ -109,7 +120,7 @@ class DataCollatorNTP():
             _add_bos_if_enough_space(
                 example[: pivotpoints[i]][-(encoder_seq_length - 1) :]
             )
-            + [eos_token_id]
+            + input_end
             for i, example in enumerate(examples_ids_masks['input_ids'])
         ]
         # truncate the attention_mask to the encoder_seq_length from the beginning
@@ -118,7 +129,7 @@ class DataCollatorNTP():
                 example[: pivotpoints[i]][-(encoder_seq_length - 1) :],
                 added_val=1,
             )
-            + [1]
+            + attention_mask_end
             for i, example in enumerate(examples_ids_masks['attention_mask'])
         ]
         # add padding to the input_ids and attention_mask
