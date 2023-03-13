@@ -1,10 +1,10 @@
+
 # Copyright (c) Facebook, Inc. and its affiliates.
 # All rights reserved.
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-import os
 import time
 import sys
 import torch
@@ -20,6 +20,9 @@ import src.util
 import src.evaluation
 import src.data
 import src.model
+
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
 
 def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, collator, best_dev_em, checkpoint_path, tokenizer, logger):
@@ -51,10 +54,11 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
         for i, batch in enumerate(train_dataloader):
             step += 1
             (idx, labels, _, context_ids, context_mask) = batch
-            print("context_ids", context_ids.shape)
-            print("context_mask", context_mask.shape)
-            print("labels", labels.shape)
-            print("idx", idx.shape)
+            # print("context_ids", context_ids)
+            # print("context_mask", context_mask)
+            # print("labels", labels)
+            # print("idx", idx)
+            
 
             train_loss = model(
                 input_ids=context_ids.cuda(),
@@ -72,7 +76,6 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
                 model.zero_grad()
 
             train_loss = src.util.average_main(train_loss, opt)
-            print("train_loss", train_loss)
             curr_loss += train_loss.item()
 
             if step % opt.eval_freq == 0:
@@ -121,12 +124,14 @@ def evaluate(model, dataset, tokenizer, collator, opt):
                 attention_mask=context_mask.cuda(),
                 max_length=50
             )
+            print("outputs", outputs)
 
             for k, o in enumerate(outputs):
                 ans = tokenizer.decode(o, skip_special_tokens=True)
                 gold = dataset.get_example(idx[k])['answers']
                 score = src.evaluation.ems(ans, gold)
                 total += 1
+                print("ans, gold, score", ans, gold, score)
                 exactmatch.append(score)
 
     exactmatch, total = src.util.weighted_average(np.mean(exactmatch), total, opt)
@@ -142,9 +147,9 @@ def run(opt):
     if opt.is_distributed:
         torch.distributed.barrier()
     checkpoint_path.mkdir(parents=True, exist_ok=True)
-    #if not checkpoint_exists and opt.is_main:
+    # if not checkpoint_exists and opt.is_main:
     #    options.print_options(opt)
-    #checkpoint_path, checkpoint_exists = util.get_checkpoint_path(opt)
+    # checkpoint_path, checkpoint_exists = util.get_checkpoint_path(opt)
 
     logger = src.util.init_logger(
         opt.is_main,
@@ -174,24 +179,32 @@ def run(opt):
     collator = src.data.Collator(opt.text_maxlength, tokenizer, answer_maxlength=opt.answer_maxlength)
 
     # use golbal rank and world size to split the eval set on multiple gpus
-    train_examples = src.data.load_data(
-        opt.train_data, 
-        global_rank=opt.global_rank, 
-        world_size=opt.world_size,
-    )
-    print("Loaded train data with a total of {} examples".format(len(train_examples)))
-    train_dataset = src.data.Dataset(train_examples, opt.n_context)
+    # train_examples = src.data.load_data(
+    #     opt.train_data, 
+    #     global_rank=opt.global_rank, 
+    #     world_size=opt.world_size,
+    # )
+    # print("Loaded train data with a total of {} examples".format(len(train_examples)))
+    train_dataset = src.data.Dataset(data_path=opt.train_data, \
+                                    global_rank=opt.global_rank, \
+                                    world_size=opt.world_size,\
+                                    n_context = opt.n_context)
 
     # use golbal rank and world size to split the eval set on multiple gpus
-    eval_examples = src.data.load_data(
-        opt.eval_data,
-        global_rank=opt.global_rank,
-        world_size=opt.world_size,
-    )
-    print("Loaded eval data with a total of {} examples".format(len(eval_examples)))
-    eval_dataset = src.data.Dataset(eval_examples, opt.n_context)
+    # eval_examples = src.data.load_data(
+    #     opt.eval_data,
+    #     global_rank=opt.global_rank,
+    #     world_size=opt.world_size,
+    # )
+    # print("Loaded eval data with a total of {} examples".format(len(eval_examples)))
+    # eval_dataset = src.data.Dataset(eval_examples, opt.n_context)
+    eval_dataset = src.data.Dataset(data_path=opt.eval_data, \
+                                    global_rank=opt.global_rank, \
+                                    world_size=opt.world_size,\
+                                    n_context = opt.n_context)
 
     if not checkpoint_exists and opt.model_path == "none":
+        logger.info(f'Training model from scratch')
         t5 = transformers.T5ForConditionalGeneration.from_pretrained(model_name)
         model = src.model.FiDT5(t5.config)
         model.load_t5(t5.state_dict())
@@ -203,10 +216,15 @@ def run(opt):
         model, optimizer, scheduler, opt_checkpoint, step, best_dev_em = \
             src.util.load(model_class, load_path, opt, reset_params=False)
         logger.info(f"Model loaded from {load_path}")
+        logger.info(f"Resuming training from step {step}")
+        logger.info(f"Best dev EM: {best_dev_em:.2f}")
     else:
         model, optimizer, scheduler, opt_checkpoint, step, best_dev_em = \
             src.util.load(model_class, opt.model_path, opt, reset_params=True)
         logger.info(f"Model loaded from {opt.model_path}")
+        logger.info(f"Resuming training from step {step}")
+        logger.info(f"Best dev EM: {best_dev_em:.2f}")
+        logger.info(f"Optimizer and scheduler are being reset.")
 
     model.set_checkpoint(opt.use_checkpoint)
 

@@ -18,7 +18,7 @@ class Options():
 
     def add_optim_options(self):
         self.parser.add_argument('--warmup_steps', type=int, default=1000)
-        self.parser.add_argument('--total_steps', type=int, default=1000)
+        self.parser.add_argument('--total_steps', type=int, default=100000)
         self.parser.add_argument('--scheduler_steps', type=int, default=None, 
                         help='total number of step for the scheduler, if None then scheduler_total_step = total_step')
         self.parser.add_argument('--accumulation_steps', type=int, default=1)
@@ -38,17 +38,17 @@ class Options():
     def add_reader_options(self):
         self.parser.add_argument('--model_name', type=str, default='Salesforce/codet5', help='model name without size')
         self.parser.add_argument('--model_max_length', type=int, default=512, help='model_max_length for tokenizer')
-        self.parser.add_argument('--train_data', type=str, default='/repo_data/open_domain_data/NQ/train.json', help='path of train data')
-        self.parser.add_argument('--eval_data', type=str, default='/repo_data/open_domain_data/NQ/dev.json', help='path of eval data')
+        self.parser.add_argument('--train_data', type=str, default='/repo_data/repo_preprocessed_data/small_train/', help='path of train data')
+        self.parser.add_argument('--eval_data', type=str, default='/repo_data/repo_preprocessed_data/small_val/', help='path of eval data')
         self.parser.add_argument('--model_size', type=str, default='base')
         self.parser.add_argument('--use_checkpoint', action='store_true', help='use checkpoint in the encoder')
-        self.parser.add_argument('--text_maxlength', type=int, default=200, 
+        self.parser.add_argument('--text_maxlength', type=int, default=512, 
                         help='maximum number of tokens in text segments (question+passage)')
         self.parser.add_argument('--answer_maxlength', type=int, default=-1, 
                         help='maximum number of tokens used to train the model, no truncation if -1')
         self.parser.add_argument('--no_title', action='store_true', 
                         help='article titles not included in passages')
-        self.parser.add_argument('--n_context', type=int, default=10)
+        self.parser.add_argument('--n_context', type=int, default=63)
 
     def add_retriever_options(self):
         self.parser.add_argument('--train_data', type=str, default='none', help='path of train data')
@@ -71,12 +71,12 @@ class Options():
     def initialize_parser(self):
         self.parser.add('-c', '--config', required=False, is_config_file=True, help='config file path')
         # basic parameters
-        self.parser.add_argument('--name', type=str, default='test', help='name of the experiment')
+        self.parser.add_argument('--name', type=str, default='debug', help='name of the experiment')
         self.parser.add_argument('--checkpoint_dir', type=str, default='/repo_data/repo_FID/checkpoints/', help='models are saved here')
         self.parser.add_argument('--model_path', type=str, default='none', help='path for retraining')
 
         # dataset parameters
-        self.parser.add_argument("--per_gpu_batch_size", default=16, type=int, 
+        self.parser.add_argument("--per_gpu_batch_size", default=1, type=int, 
                         help="Batch size per GPU/CPU for training.")
         self.parser.add_argument('--maxload', type=int, default=-1)
 

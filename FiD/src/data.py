@@ -4,6 +4,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 import torch
 import random
 import json
@@ -11,36 +12,48 @@ import numpy as np
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(self,
-                 data,
+                 data_path,
                  n_context=None,
-                 question_prefix='question:',
-                 title_prefix='title:',
-                 passage_prefix='context:'):
-        self.data = data
+                 global_rank=-1,
+                 world_size=-1,
+                 question_prefix='hole_context:',
+                 title_prefix='rule_name:',
+                 passage_prefix='rule_context:'):
+        assert data_path
+        examples = []
+        # each example is a json object that consists of data for a single hole. We load the json object later for efficiency.
+        for dp, dn, filenames in os.walk(data_path):
+            for f in filenames:
+                if f == 'hole_and_rule_contexts.json':
+                    data_path = os.path.join(dp, f)
+                    #print('Loading data from {}'.format(data_path))
+                    lines = open(data_path, 'r').readlines()
+                    for i, line in enumerate(lines):
+                        # distribute the data across the ranks (GPUs).
+                        if global_rank > -1 and not i % world_size == global_rank:
+                            continue
+                        examples.append(line.strip())
+                    #data_path.close()
+
+        print('Loaded {} examples with global rank {} and world size {}'.format(len(examples), global_rank, world_size))
+        self.examples = examples
         self.n_context = n_context
         self.question_prefix = question_prefix
         self.title_prefix = title_prefix
         self.passage_prefix = passage_prefix
-        self.sort_data()
+        #self.sort_data()
 
     def __len__(self):
-        return len(self.data)
-
-    def get_target(self, example):
-        if 'target' in example:
-            target = example['target']
-            return target + ' </s>'
-        elif 'answers' in example:
-            return random.choice(example['answers']) + ' </s>'
-        else:
-            return None
+        return len(self.examples)
 
     def __getitem__(self, index):
-        example = self.data[index]
+        example = self.examples[index]
+        example = json.loads(example)
         question = self.question_prefix + " " + example['question']
-        target = self.get_target(example)
+        target = example['target']
 
         if 'ctxs' in example and self.n_context is not None:
+            example['ctxs'].sort(key=lambda x: float(x['score']), reverse=True)
             f = self.title_prefix + " {} " + self.passage_prefix + " {}"
             contexts = example['ctxs'][:self.n_context]
             passages = [f.format(c['title'], c['text']) for c in contexts]
@@ -61,14 +74,16 @@ class Dataset(torch.utils.data.Dataset):
             'scores' : scores
         }
 
-    def sort_data(self):
-        if self.n_context is None or not 'score' in self.data[0]['ctxs'][0]:
-            return
-        for ex in self.data:
-            ex['ctxs'].sort(key=lambda x: float(x['score']), reverse=True)
+    # def sort_data(self):
+    #     if self.n_context is None or not 'score' in self.data[0]['ctxs'][0]:
+    #         return
+    #     for ex in self.data:
+    #         ex['ctxs'].sort(key=lambda x: float(x['score']), reverse=True)
 
     def get_example(self, index):
-        return self.data[index]
+        example = self.examples[index]
+        example = json.loads(example)
+        return example
 
 def encode_passages(batch_text_passages, tokenizer, max_length):
     passage_ids, passage_masks = [], []
@@ -119,30 +134,31 @@ class Collator(object):
 
         return (index, target_ids, target_mask, passage_ids, passage_masks)
 
-def load_data(data_path=None, global_rank=-1, world_size=-1):
-    assert data_path
-    if data_path.endswith('.jsonl'):
-        data = open(data_path, 'r')
-    elif data_path.endswith('.json'):
-        with open(data_path, 'r') as fin:
-            data = json.load(fin)
-    examples = []
-    for k, example in enumerate(data):
-        if global_rank > -1 and not k%world_size==global_rank:
-            continue
-        if data_path is not None and data_path.endswith('.jsonl'):
-            example = json.loads(example)
-        if not 'id' in example:
-            example['id'] = k
-        for c in example['ctxs']:
-            if not 'score' in c:
-                c['score'] = 1.0 / (k + 1)
-        examples.append(example)
-    ## egrave: is this needed?
-    if data_path is not None and data_path.endswith('.jsonl'):
-        data.close()
-
-    return examples
+# def load_data(data_path=None, global_rank=-1, world_size=-1):
+#     assert data_path
+#     examples = []
+#     for dp, dn, filenames in os.walk(data_path):
+#       for f in filenames:
+#         if f == 'hole_and_rule_contexts.json':
+#             data_path = os.path.join(dp, f)
+#             print('Loading data from {}'.format(data_path))
+#             data = open(data_path, 'r')
+#             for k, example in enumerate(data):
+#                 if global_rank > -1 and not k%world_size==global_rank:
+#                     continue
+#                 if data_path is not None:
+#                     example = json.loads(example)
+#                 if not 'id' in example:
+#                     example['id'] = k
+#                 for c in example['ctxs']:
+#                     if not 'score' in c:
+#                         c['score'] = 1.0 / (k + 1)
+#                 examples.append(example)
+#             ## egrave: is this needed?
+#             if data_path is not None and data_path.endswith('.json'):
+#                 data.close()
+#         print('Loaded {} examples'.format(len(examples)))
+#     return examples
 
 class RetrieverCollator(object):
     def __init__(self, tokenizer, passage_maxlength=200, question_maxlength=40):
