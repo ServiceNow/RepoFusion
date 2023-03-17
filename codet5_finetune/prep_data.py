@@ -14,12 +14,7 @@ import random
 from transformers import AutoTokenizer
 
 from codet5_finetune.options import options
-
-
-def set_global_seeds(opt):
-    np.random.seed(opt.seed)
-    os.environ['PYTHONHASHSEED'] = str(opt.seed)
-    random.seed(opt.seed)
+from codet5_finetune.util import set_global_seeds
 
 def get_java_files_remove_files_present_in_reconstructed_repos(opt):
     '''
