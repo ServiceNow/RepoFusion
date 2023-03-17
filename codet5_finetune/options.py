@@ -1,19 +1,20 @@
 import yaml
 import sys
+from pathlib import Path
 
 
 def options(args=None):
     '''
     A placeholder for options to be replaced with actual arg parsing later
       meant to be run from a pwd of the repo root or a path to the common
-      config specified in args['common_config']
+      config specified in args['base']
     '''
-    common_config = 'conf/codet5_finetune/common_config.yaml'
+    base_config = 'conf/codet5_finetune/base.yaml'
     experiment_config = None
     if args is not None:
         if isinstance(args, dict):
-            if 'common_config' in args:
-                common_config = args['common_config']
+            if 'base_config' in args:
+                base_config = args['base_config']
             if 'experiment_config' in args:
                 experiment_config = args['experiment_config']
         else:
@@ -21,14 +22,20 @@ def options(args=None):
     elif len(sys.argv) > 1:
         experiment_config = sys.argv[1]
 
+    base_config = Path(base_config)
+    if experiment_config is not None:
+        experiment_config = Path(experiment_config)
+
     print(sys.argv)
     
-    with open(common_config) as f:
+    with open(base_config) as f:
         data = yaml.safe_load(f)
+        data['experiment_name'] = base_config.stem
         
     if experiment_config is not None:
         with open(experiment_config) as f:
             data.update(yaml.safe_load(f))
+        data['experiment_name'] = experiment_config.stem
     
     opt = type('Opt', (), data)()
     return opt

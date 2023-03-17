@@ -1,5 +1,3 @@
-experiment_name: experiment1
-
 # Model params
 base_model_name: Salesforce/codet5-base
 trained_model_name: codet5-base-ntp-java
