@@ -3,10 +3,17 @@ filename_1K_20plus_file_list: /data/hf_repos/the-stak-repo-level/meta_data/java/
 filename_the_stack11_dedup_alt_comments: /data/christmas_datasets/the_stack_dedup_alt_comments.jsonl
 path_java_filtered: /repo_data/the_stack11_dedup_alt_comments_no_1K_set/data
 path_java_filtered_subset: /repo_data/the_stack11_dedup_alt_comments_no_1K_set_subset/data
+path_java_filtered_subset_pivots: /repo_data/the_stack11_dedup_alt_comments_no_1K_set_subset/pivots
+repo_names_rand_seq_filename: /repo_data/the_stack11_dedup_alt_comments_no_1K_set_subset/repo_names_rand_seq.json
+splits_filename: /repo_data/the_stack11_dedup_alt_comments_no_1K_set_subset/splits_repo_names.json
+regenerate_repo_names_rand_seq: False
+min_file_count_per_repo: 20
+pivots_per_file: 10
+max_pivots_per_repository: 10000
 bucket_size: 400000
 train_size: 300000
-validation_size: 15000
-test_size: 30000
+validation_size: 100000
+test_size: 100000
 num_proc: 8
 seed: 42
 
