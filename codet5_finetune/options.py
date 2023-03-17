@@ -8,7 +8,7 @@ def options(args=None):
       meant to be run from a pwd of the repo root or a path to the common
       config specified in args['common_config']
     '''
-    common_config = 'codet5_finetune/common_config.yaml'
+    common_config = 'conf/codet5_finetune/common_config.yaml'
     experiment_config = None
     if args is not None:
         if isinstance(args, dict):
