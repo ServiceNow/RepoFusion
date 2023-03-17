@@ -1,6 +1,8 @@
 import random
 import torch
 import transformers
+import datasets
+
 from transformers import BatchEncoding
 
 class DataCollatorNTP():
@@ -196,3 +198,17 @@ class DataCollatorNTP():
             ]
         )
         return encoding 
+    
+
+def get_debug_pivot_sets(ds_pivots, opt):
+    # TODO: add rank support, for now run only on one gpu
+    ds_pivots_train  = ds_pivots[opt.overfit_split].shuffle(seed=opt.seed)
+    ds_pivot_overfit = datasets.DatasetDict()
+    ds_pivot_overfit['train'] = ds_pivots_train.select(range(opt.overfit_split_size))
+    if opt.is_overfit_split_eval_as_train:
+        ds_pivot_overfit['validation'] = ds_pivot_overfit['train']
+    else:
+        ds_pivot_overfit['validation'] = ds_pivots_train.select(
+            range(opt.overfit_split_size, opt.overfit_split_size+opt.overfit_split_size_eval)
+        )
+    return ds_pivot_overfit

@@ -10,7 +10,7 @@ from transformers import AutoModelForSeq2SeqLM, Seq2SeqTrainingArguments, Seq2Se
 
 from codet5_finetune.options import options
 from codet5_finetune.util import set_global_seeds
-from codet5_finetune.data import DataCollatorNTP
+from codet5_finetune.data import DataCollatorNTP, get_debug_pivot_sets
 
 
 def prepare(opt):
@@ -23,6 +23,8 @@ def prepare(opt):
     print(f'{len(ctx.ds_data["validation"])=}')
 
     ctx.ds_pivots = datasets.load_from_disk(opt.path_java_filtered_subset_pivots)
+    if opt.debug:
+        ctx.ds_pivots = get_debug_pivot_sets(ctx.ds_pivots, opt)
     print(f'{len(ctx.ds_pivots["train"])=}')
     print(f'{len(ctx.ds_pivots["validation"])=}')
 
