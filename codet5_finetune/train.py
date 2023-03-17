@@ -9,6 +9,7 @@ from transformers import AutoTokenizer
 from transformers import AutoModelForSeq2SeqLM, Seq2SeqTrainingArguments, Seq2SeqTrainer
 
 from codet5_finetune.options import options
+from codet5_finetune.util import set_global_seeds
 from codet5_finetune.data import DataCollatorNTP
 
 
@@ -17,12 +18,18 @@ def prepare(opt):
 
     print(f'{opt.per_device_train_batch_size=}')
 
-    ctx.ds = datasets.load_from_disk(opt.path_java_filtered_subset)
-    print(f'{len(ctx.ds["train"])=}')
+    ctx.ds_data = datasets.load_from_disk(opt.path_java_filtered_subset)
+    print(f'{len(ctx.ds_data["train"])=}')
+    print(f'{len(ctx.ds_data["validation"])=}')
+
+    ctx.ds_pivots = datasets.load_from_disk(opt.path_java_filtered_subset_pivots)
+    print(f'{len(ctx.ds_pivots["train"])=}')
+    print(f'{len(ctx.ds_pivots["validation"])=}')
 
     ctx.tokenizer = AutoTokenizer.from_pretrained(opt.base_model_name)
 
     ctx.data_collator = DataCollatorNTP(
+        ctx.ds_data,
         ctx.tokenizer,
         min_encoder_seq_length=opt.min_encoder_seq_length,
         min_decoder_seq_length=opt.min_decoder_seq_length,
@@ -73,8 +80,8 @@ def prepare(opt):
     ctx.trainer = Seq2SeqTrainer(
         model_init=model_init,
         args=ctx.args,
-        train_dataset=ctx.ds['train'],
-        eval_dataset=ctx.ds['test'],
+        train_dataset=ctx.ds_pivots['train'],
+        eval_dataset=ctx.ds_pivots['validation'],
         data_collator=ctx.data_collator,
         tokenizer=ctx.tokenizer,
         compute_metrics=compute_metrics
@@ -87,5 +94,7 @@ def run(ctx):
     ctx.trainer.train()
 
 if __name__ == '__main__':
-    ctx = prepare(options())
+    opt = options()
+    set_global_seeds(opt)
+    ctx = prepare(opt)
     run(ctx)
