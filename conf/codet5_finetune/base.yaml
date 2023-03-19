@@ -28,7 +28,7 @@ save_steps: 200
 save_total_limit: 3
 evaluation_strategy: steps
 eval_steps: 100
-metric_for_best_model: em_first_line
+metric_for_best_model: em_a2p_ratio
 greater_is_better: True
 predict_with_generate: True
 include_inputs_for_metrics: True
