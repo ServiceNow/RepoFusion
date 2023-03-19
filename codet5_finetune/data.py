@@ -212,3 +212,65 @@ def get_debug_pivot_sets(ds_pivots, opt):
             range(opt.overfit_split_size, opt.overfit_split_size+opt.overfit_split_size_eval)
         )
     return ds_pivot_overfit
+
+def assert_debug_data(ctx, opt):
+    # test only valid for this seed
+    # for at least 10 samples of debug data
+    # and for the same traind and validatin sets
+    # and ...
+    assert opt.seed == 42
+    assert opt.overfit_split_size >= 10
+    assert opt.overfit_split == 'validation'
+    assert opt.is_overfit_split_eval_as_train == True
+
+    data_ids = [2049, 109, 8793, 5262, 5906, 3713, 6041, 9721, 518, 7970]
+
+    # test train indexes are a match
+    train_pivots = ctx.ds_pivots["train"][:10]
+    assert all(a == b for a, b in zip(
+        train_pivots['data_idx'], data_ids
+    ))
+
+    # test validatin indexes are a match and the same as train ones
+    val_pivots = ctx.ds_pivots["validation"][:10]
+    assert all(a == b for a, b in zip(
+        val_pivots['data_idx'], data_ids
+    ))
+
+    # test indexes point to the same data samples
+    data = ctx.ds_data[val_pivots['split'][0]][val_pivots['data_idx']]
+
+    max_stars_repo_path = [
+        'hibernate-reactive-core/src/main/java/org/hibernate/reactive/vertx/package-info.java',
+        'overlap2d/src/com/uwsoft/editor/view/menu/Overlap2DMenuBarMediator.java',
+        'src/test/java/com/github/albahrani/aquacontrol/server/LightServerTest.java',
+        'src/org/earthChem/db/CitationList.java',
+        'vertx-pin/zero-ke/src/main/java/io/vertx/tp/ke/refine/KeCompare.java',
+        'Tangerine/api/src/main/java/org/mitre/tangerine/adapter/InboundAdapter.java',
+        'src/main/java/de/rwth/idsg/bikeman/psinterface/dto/response/CardWriteKeyDTO.java',
+        'junit/src/org/apache/tapestry/junit/form/TestListEditMap.java',
+        'src/com/oltpbenchmark/benchmarks/auctionmark/util/ItemInfo.java',
+        'codigo/RedeSocial/src/br/com/redesocial/modelo/bo/EstadoBO.java'
+    ]
+    assert all(a == b for a, b in zip(
+        data['max_stars_repo_path'], max_stars_repo_path
+    ))
+
+    max_stars_repo_name = [
+        'tsegismont/hibernate-reactive',
+        'i-Taozi/overlap2d',
+        'albahrani/aquacontrol-server',
+        'earthchem/EarthChemAdmin2',
+        'evgreenhua/vertx-zero',
+        'samant8/member-MITRE',
+        'BulkSecurityGeneratorProject/BikeMan',
+        'JLLeitschuh/tapestry3',
+        'MooPoo13/oltpbench',
+        'Ronneesley/redesocial'
+    ]
+    assert all(a == b for a, b in zip(
+        data['max_stars_repo_name'], max_stars_repo_name
+    ))
+
+
+    

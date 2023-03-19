@@ -28,6 +28,7 @@ def prepare(opt):
     ctx.ds_pivots = datasets.load_from_disk(opt.path_java_filtered_subset_pivots)
     if opt.debug:
         ctx.ds_pivots = get_debug_pivot_sets(ctx.ds_pivots, opt)
+        assert_debug_data(ctx, opt)
     print(f'{len(ctx.ds_pivots["train"])=}')
     print(f'{len(ctx.ds_pivots["validation"])=}')
 
