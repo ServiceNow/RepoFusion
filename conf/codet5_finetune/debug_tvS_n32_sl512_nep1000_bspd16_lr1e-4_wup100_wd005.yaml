@@ -1,0 +1,36 @@
+# Model params
+base_model_name: Salesforce/codet5-base
+trained_model_name: codet5-base-ntp-java
+model_dir_base: /repo_data/finetuning_checkpoints
+evaluation_strategy: "steps"
+eval_steps: 100
+predict_with_generate: True
+include_inputs_for_metrics: True
+logging_strategy: steps
+logging_steps: 100
+save_strategy: steps
+save_steps: 200
+save_total_limit: 3
+fp16: True
+report_to: tensorboard
+dataloader_num_workers: 4
+
+append_special_token_to_input:
+
+min_encoder_seq_length: 0
+min_decoder_seq_length: 0
+encoder_seq_length: 512
+decoder_seq_length: 512
+
+# if wold have been perfect 4e-6 and several epochs
+num_train_epochs: 1000
+per_device_train_batch_size: 16
+per_device_eval_batch_size: 16
+learning_rate: 1.0e-4 
+warmup_steps: 100
+weight_decay: 0.05
+
+strip_new_lines_for_em: False
+
+debug: True
+overfit_split_size: 32
