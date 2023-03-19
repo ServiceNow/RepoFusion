@@ -24,8 +24,11 @@ def exact_match_a2p_ratio(p, l):
             cnt += 1
         else:
             break
-    r =  cnt / max(len(l), len(p))
-    print(r)
+    l  = max(len(l), len(p))
+    # if empty label and prediction,- match
+    if cnt == 0 and l == 0:
+        return 1.0
+    r =  cnt / l
     return r
 
 def average_exact_match_a2p_ratio(predictions, labels):
@@ -50,6 +53,10 @@ def prepare(opt):
     if opt.debug:
         ctx.ds_pivots = get_debug_pivot_sets(ctx.ds_pivots, opt)
         assert_debug_data(ctx, opt)
+
+    # cap validation for 10K for now for speed
+    ctx.ds_pivots["validation"] = ctx.ds_pivots["validation"].shuffle(seed=opt.seed).select(range(10000))
+
     print(f'{len(ctx.ds_pivots["train"])=}')
     print(f'{len(ctx.ds_pivots["validation"])=}')
 
@@ -124,18 +131,28 @@ def prepare(opt):
         #     labels, labels_first_line = strip_get_first_line(labels)
         #     predictions, predictions_first_line = strip_get_first_line(predictions)
         # else:
-        labels_first_line = [el.splitlines()[0] for el in labels]
-        predictions_first_line = [el.splitlines()[0] for el in predictions]
+        def get_first_lines(vals):
+            return [
+                lines[0] if len(lines) > 0 else ''
+                for lines in (
+                    el.splitlines()
+                    for el in vals
+                )
+            ]
+        labels_first_line = get_first_lines(labels)
+        predictions_first_line = get_first_lines(predictions)
 
         # TODO: get several exactly matched and several not matched samples instead
+        # for now save just 500 of first examples
+        sz = min(500, len(inputs))
         examples = {
             'full': [
                 {'input': input, 'label': label, 'prediction': prediction}
-                for input, label, prediction in zip(inputs, labels, predictions)
+                for input, label, prediction in zip(inputs[:sz], labels[:sz], predictions[:sz])
             ],
             'first_line': [
                  {'input': input, 'label': label, 'prediction': prediction}
-                for input, label, prediction in zip(inputs, labels_first_line, predictions_first_line)
+                for input, label, prediction in zip(inputs[:sz], labels_first_line[:sz], predictions_first_line[:sz])
             ]
         }
         global step
