@@ -1,4 +1,5 @@
 import random
+import os
 from pathlib import Path
 import torch
 import numpy as np
@@ -15,6 +16,26 @@ from codet5_finetune.util import set_global_seeds
 from codet5_finetune.data import DataCollatorNTP, get_debug_pivot_sets, assert_debug_data
 
 step = 0
+
+def exact_match_a2p_ratio(p, l):
+    cnt = 0
+    for ip, il in zip(p, l):
+        if ip == il:
+            cnt += 1
+        else:
+            break
+    r =  cnt / max(len(l), len(p))
+    print(r)
+    return r
+
+def average_exact_match_a2p_ratio(predictions, labels):
+    return sum(
+        exact_match_a2p_ratio(p, l)
+        for p, l in zip(predictions, labels)
+    ) / len(labels)
+
+def exact_matches_ratio(a, b):
+    return sum(el_a == el_b for el_a, el_b in zip(a, b)) / len(a)
 
 def prepare(opt):
     ctx = type('Ctx', (), {})()
@@ -61,10 +82,13 @@ def prepare(opt):
         model_dir,
         evaluation_strategy=opt.evaluation_strategy,
         eval_steps=opt.eval_steps,
-        load_best_model_at_end=True, # to enable saving of best model according to docs
+        # to enable saving of best model according to docs
+        load_best_model_at_end=True, 
         metric_for_best_model=opt.metric_for_best_model,
         greater_is_better=opt.greater_is_better,
         predict_with_generate=opt.predict_with_generate,
+        # max generation lenght to be the same as decoder seq lenght for training
+        generation_max_length = opt.decoder_seq_length, 
         include_inputs_for_metrics=opt.include_inputs_for_metrics,
         logging_strategy=opt.logging_strategy,
         logging_steps=opt.logging_steps,
@@ -115,16 +139,17 @@ def prepare(opt):
             ]
         }
         global step
-        example_file = examples_dir / f'{step}.json'
+        # in case the fuction is called on all processes, will work on one node only
+        pid = os.getpid()
+        example_file = examples_dir / f'{step}_{pid}.json'
         with example_file.open('wt') as f:
             json.dump(examples, f)
         step += 1
-        def count_exact_matches(a, b):
-            return sum(el_a == el_b for el_a, el_b in zip(a, b))
 
         return {
-            'em': count_exact_matches(predictions, labels),
-            'em_first_line': count_exact_matches(labels_first_line, predictions_first_line),
+            'em_ratio': exact_matches_ratio(predictions, labels),
+            'em_a2p_ratio': average_exact_match_a2p_ratio(predictions, labels),
+            'em_first_line_ratio': exact_matches_ratio(labels_first_line, predictions_first_line),
             #'examples': str(examples)
         }
     
