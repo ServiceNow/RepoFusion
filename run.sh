@@ -53,6 +53,6 @@ eai job new --preemptable --restartable --image $THIS_IMAGE \
     --env PYTHONPATH=$prog_pythonpath \
     --workdir $prog_workdir \
     --data snow.$eai_user_name.home:/home/toolkit:rw \
-    --data snow.code_llm.data:/data:rw \
+    --data snow.code_llm.data:/data:ro \
     --data snow.repo_code_llm.base:/repo_data:rw \
     -- bash -c "source ~/.bashrc && conda activate $CONDA_PREFIX && $launcher $launcher_args"
