@@ -52,7 +52,7 @@ def evaluate(model, dataset, dataloader, tokenizer, opt):
                 ans = tokenizer.decode(o, skip_special_tokens=True)
                 example = dataset.data[idx[k]]
                 if 'answers' in example:
-                    score = src.evaluation.ems(ans, example['answers'])
+                    score = src.evaluation.em_code(ans, example['answers'])
                     exactmatch.append(score)
 
                 if opt.write_results:

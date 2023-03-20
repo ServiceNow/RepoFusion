@@ -7,6 +7,7 @@
 
 import collections
 import logging
+import random
 import regex
 import string
 import unicodedata
@@ -140,6 +141,21 @@ def exact_match_score(prediction, ground_truth):
 
 def ems(prediction, ground_truths):
     return max([exact_match_score(prediction, gt) for gt in ground_truths])
+
+def em_code(prediction, ground_truth):
+    gt = ground_truth.rstrip()
+    pred = prediction.rstrip()
+    return pred == gt
+
+def get_batch_exactmatch(outputs, tokenizer, dataset, idx, total=0, exactmatch=[]):
+    for k, o in enumerate(outputs):
+        ans = tokenizer.decode(o, skip_special_tokens=True)
+        gold = dataset.get_example(idx[k])['target']
+        score = em_code(ans, gold)
+        #print("ans:{ans}, gold:{gold}, score:{score}".format(ans=ans, gold=gold, score=score))
+        total += 1
+        exactmatch.append(score)
+    return exactmatch, total, (ans, gold)
 
 ####################################################
 ########        RETRIEVER EVALUATION        ########

@@ -24,7 +24,6 @@ import src.model
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
-
 def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, collator, best_dev_em, checkpoint_path, tokenizer, logger):
     global torch
     if opt.is_main:
@@ -36,6 +35,7 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
             logger.warning('Tensorboard is not available.')
 
     torch.manual_seed(opt.global_rank + opt.seed) #different seed for different sampling depending on global_rank
+    # sample random holes for training.
     train_sampler = RandomSampler(train_dataset)
     train_dataloader = DataLoader(
         train_dataset,
@@ -46,7 +46,7 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
         collate_fn=collator
     )
 
-    loss, curr_loss = 0.0, 0.0
+    curr_loss = 0.0
     epoch = 1
     model.train()
     while step < opt.total_steps:
@@ -54,11 +54,10 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
         for i, batch in enumerate(train_dataloader):
             step += 1
             (idx, labels, _, context_ids, context_mask) = batch
-            # print("context_ids", context_ids)
-            # print("context_mask", context_mask)
-            # print("labels", labels)
-            # print("idx", idx)
-            
+            # print("context_ids", context_ids.shape)
+            # print("context_mask", context_mask.shape)
+            # print("labels", labels.shape)
+            # print("idx", idx.shape)
 
             train_loss = model(
                 input_ids=context_ids.cuda(),
@@ -66,6 +65,8 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
                 labels=labels.cuda(),
                 return_dict=False
             )[0]
+
+            #print(train_loss)
 
             train_loss.backward()
 
@@ -76,33 +77,53 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
                 model.zero_grad()
 
             train_loss = src.util.average_main(train_loss, opt)
+            # the training loss is calculated over the whole batch.
             curr_loss += train_loss.item()
 
             if step % opt.eval_freq == 0:
-                dev_em = evaluate(model, eval_dataset, tokenizer, collator, opt)
+                # the validation loss and EM are calculted over the whole validation dataset.
+                logger.info(f"Evaluating on the full validation set.")
+                dev_loss, dev_em = evaluate(model, eval_dataset, tokenizer, collator, opt)
+                # calculate train EM only over the current batch to save computation.
+                outputs = model.generate(input_ids=context_ids.cuda(),
+                                        attention_mask=context_mask.cuda(),
+                                        max_length=50)
+                exactmatch, total, (sample_ans, sample_gold) = src.evaluation.get_batch_exactmatch(outputs, tokenizer, train_dataset, idx)
+                sample_train_em, _ = src.util.weighted_average(np.mean(exactmatch), total, opt)
+
                 model.train()
+                # Save the checkpoint based on performance on validation EM. Save the metrics to tensorboard and logs.
                 if opt.is_main:
                     if dev_em > best_dev_em:
                         best_dev_em = dev_em
                         src.util.save(model, optimizer, scheduler, step, best_dev_em,
                                   opt, checkpoint_path, 'best_dev')
+                    logger.info(f"Saving best dev EM checkpoint to {checkpoint_path}")
                     log = f"{step} / {opt.total_steps} |"
-                    log += f"train: {curr_loss/opt.eval_freq:.3f} |"
-                    log += f"evaluation: {100*dev_em:.2f}EM |"
+                    log += f"training loss: {curr_loss/opt.eval_freq:.3f} |"
+                    log += f"validation loss: {dev_loss} |"
+                    log += f"sample training EM: {100*sample_train_em:.2f}EM |"
+                    log += f"evaluation EM: {100*dev_em:.2f}EM |"
                     log += f"lr: {scheduler.get_last_lr()[0]:.5f}"
                     logger.info(log)    
                     if tb_logger is not None:
-                        tb_logger.add_scalar("Evaluation", dev_em, step)
-                        tb_logger.add_scalar("Training", curr_loss / (opt.eval_freq), step)
+                        tb_logger.add_scalar("Evaluation Loss", dev_loss, step)
+                        tb_logger.add_scalar("Training Loss", curr_loss / (opt.eval_freq), step)
+                        tb_logger.add_scalar("Evaluation EM", dev_em, step)
+                        tb_logger.add_scalar("Training EM", sample_train_em, step)
+                        tb_logger.add_text("Training Sample Predictions", str({'pred': sample_ans, 'gold': sample_gold}), step)
                     curr_loss = 0.
 
             if opt.is_main and step % opt.save_freq == 0:
                 src.util.save(model, optimizer, scheduler, step, best_dev_em,
                           opt, checkpoint_path, f"step-{step}")
+                logger.info(f"Saving checkpoint to {checkpoint_path}")
             if step > opt.total_steps:
                 break
+    logger.info(f"Training finished after {epoch} epochs and {step} steps.")
 
 def evaluate(model, dataset, tokenizer, collator, opt):
+    # sample sequntially for evaluation.
     sampler = SequentialSampler(dataset)
     dataloader = DataLoader(dataset,
         sampler=sampler,
@@ -114,35 +135,44 @@ def evaluate(model, dataset, tokenizer, collator, opt):
     model.eval()
     total = 0
     exactmatch = []
+    curr_loss = 0.0
+    count = 0
     model = model.module if hasattr(model, "module") else model
     with torch.no_grad():
         for i, batch in enumerate(dataloader):
-            (idx, _, _, context_ids, context_mask) = batch
+            count += 1
+            (idx, labels, _, context_ids, context_mask) = batch
 
+            eval_loss = model(
+                input_ids=context_ids.cuda(),
+                attention_mask=context_mask.cuda(),
+                labels=labels.cuda(),
+                return_dict=False
+            )[0]
+
+            eval_loss = src.util.average_main(eval_loss, opt)
+            #print(eval_loss)
+            curr_loss += eval_loss.item()
+            
             outputs = model.generate(
                 input_ids=context_ids.cuda(),
                 attention_mask=context_mask.cuda(),
                 max_length=50
             )
-            print("outputs", outputs)
 
-            for k, o in enumerate(outputs):
-                ans = tokenizer.decode(o, skip_special_tokens=True)
-                gold = dataset.get_example(idx[k])['answers']
-                score = src.evaluation.ems(ans, gold)
-                total += 1
-                print("ans, gold, score", ans, gold, score)
-                exactmatch.append(score)
+            exactmatch, total, _ = src.evaluation.get_batch_exactmatch(outputs, tokenizer, dataset, idx, total, exactmatch)
 
     exactmatch, total = src.util.weighted_average(np.mean(exactmatch), total, opt)
-    return exactmatch
+
+    return curr_loss/count, exactmatch
 
 def run(opt):
     torch.manual_seed(opt.seed)
     src.slurm.init_distributed_mode(opt)
     src.slurm.init_signal_handler()
 
-    checkpoint_path = Path(opt.checkpoint_dir)/opt.name
+    experiment_name = opt.name + '_' + opt.passage_mode + '_' + str(opt.is_append_question)
+    checkpoint_path = Path(opt.checkpoint_dir)/experiment_name
     checkpoint_exists = checkpoint_path.exists()
     if opt.is_distributed:
         torch.distributed.barrier()
@@ -159,7 +189,8 @@ def run(opt):
 
     model_name = opt.model_name + '-' +opt.model_size
     model_class = src.model.FiDT5
-    print(opt.train_data, opt.eval_data, model_name, checkpoint_path)
+    logger.info(f"Model: {model_name}")
+    logger.info(f"Checkpoint Path: {checkpoint_path}")
 
     # Get max model lenght
     model_cfg = transformers.AutoConfig.from_pretrained(model_name)
@@ -173,36 +204,35 @@ def run(opt):
     if output_past is False and model_max_length > model_cfg.n_positions:
         raise ValueError(f'max_model_length is bigger than n_positions for output_past == False')
     
-    #load data
-    #tokenizer = transformers.T5Tokenizer.from_pretrained(model_name, model_max_length=model_max_length)
+    # Set the tokenizer and initialize the collator.
     tokenizer = transformers.RobertaTokenizer.from_pretrained(model_name)
-    collator = src.data.Collator(opt.text_maxlength, tokenizer, answer_maxlength=opt.answer_maxlength)
+    collator = src.data.Collator(text_maxlength=opt.text_maxlength, \
+                                    tokenizer=tokenizer, \
+                                    answer_maxlength=opt.answer_maxlength,
+                                    is_append_question=opt.is_append_question)
 
-    # use golbal rank and world size to split the eval set on multiple gpus
-    # train_examples = src.data.load_data(
-    #     opt.train_data, 
-    #     global_rank=opt.global_rank, 
-    #     world_size=opt.world_size,
-    # )
-    # print("Loaded train data with a total of {} examples".format(len(train_examples)))
+    # Load the training and validation data. The data is split across multiple GPUs.
     train_dataset = src.data.Dataset(data_path=opt.train_data, \
                                     global_rank=opt.global_rank, \
                                     world_size=opt.world_size,\
-                                    n_context = opt.n_context)
+                                    n_context = opt.n_context, \
+                                    tokenizer=tokenizer, \
+                                    passage_mode=opt.passage_mode, \
+                                    is_append_question=opt.is_append_question, \
+                                    text_maxlen=opt.text_maxlength)
+    logger.info(f'Loaded {len(train_dataset)} training examples from {opt.train_data}')
 
-    # use golbal rank and world size to split the eval set on multiple gpus
-    # eval_examples = src.data.load_data(
-    #     opt.eval_data,
-    #     global_rank=opt.global_rank,
-    #     world_size=opt.world_size,
-    # )
-    # print("Loaded eval data with a total of {} examples".format(len(eval_examples)))
-    # eval_dataset = src.data.Dataset(eval_examples, opt.n_context)
     eval_dataset = src.data.Dataset(data_path=opt.eval_data, \
                                     global_rank=opt.global_rank, \
                                     world_size=opt.world_size,\
-                                    n_context = opt.n_context)
+                                    n_context = opt.n_context, \
+                                    tokenizer=tokenizer, \
+                                    passage_mode=opt.passage_mode, \
+                                    is_append_question=opt.is_append_question, \
+                                    text_maxlen=opt.text_maxlength)
+    logger.info(f'Loaded {len(eval_dataset)} validation examples from {opt.eval_data}')
 
+    # Initialize the model and load from checkpoint if it exists.
     if not checkpoint_exists and opt.model_path == "none":
         logger.info(f'Training model from scratch')
         t5 = transformers.T5ForConditionalGeneration.from_pretrained(model_name)
@@ -237,6 +267,8 @@ def run(opt):
         )
 
     logger.info("Start training")
+    # the training and evaluation loop.
+    # print(opt)
     train(
         model,
         optimizer,

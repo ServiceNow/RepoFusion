@@ -18,7 +18,11 @@ class Dataset(torch.utils.data.Dataset):
                  world_size=-1,
                  question_prefix='hole_context:',
                  title_prefix='rule_name:',
-                 passage_prefix='rule_context:'):
+                 passage_prefix='rule_context:',
+                 passage_mode='truncation-direct',
+                 text_maxlen=512,
+                 tokenizer=None, 
+                 is_append_question=True):
         assert data_path
         examples = []
         # each example is a json object that consists of data for a single hole. We load the json object later for efficiency.
@@ -41,10 +45,78 @@ class Dataset(torch.utils.data.Dataset):
         self.question_prefix = question_prefix
         self.title_prefix = title_prefix
         self.passage_prefix = passage_prefix
-        #self.sort_data()
+        # determines the way the passages are created for each hole.
+        self.passage_mode = passage_mode
+        self.text_maxlen = text_maxlen
+        self.tokenizer = tokenizer
+        self.is_append_question = is_append_question
 
     def __len__(self):
         return len(self.examples)
+
+    def divide_chunks(self, l, n):   
+        # looping till length l
+        for i in range(0, len(l), n):
+            yield l[i:i + n]
+
+    def get_contexts(self, contexts, question=None):
+        # the passages are already stored in sorted rule order.
+
+        if self.passage_mode == 'truncation-direct':
+            return contexts[:self.n_context]
+
+        # the default codex context is always the last passage. This is based on the understanding that the encoded representations
+        # of the rules are concatenated in the order of the passages. Therefore, the decoder attends to this context last such that
+        # the model can learn to complete the hole starting from the default codex context.
+        elif self.passage_mode == 'truncation-codex-last':
+            codex_context = contexts.pop(16) # 16 is the index of the default codex context.
+            contexts.append(codex_context)
+            return contexts[:self.n_context]
+
+        # randomly shuffle the contexts. rule order is distorted here.
+        elif self.passage_mode == 'truncation-random':
+            random.shuffle(contexts)
+            return contexts[:self.n_context]
+
+        # split the non-empty contexts into chunks till it fits in context length in the sorted order.
+        elif self.passage_mode == 'no-truncation-direct':
+            if self.is_append_question:
+                question_tokens_len = len(self.tokenizer(question)['input_ids'])
+                rule_context_len = self.text_maxlen - question_tokens_len
+            else:
+                rule_context_len = self.text_maxlen
+            modified_contexts = []
+            for context in contexts:
+                if context['text']:
+                    tokens = self.tokenizer(context['text'])['input_ids']
+                    parts = list(self.divide_chunks(tokens, rule_context_len))
+                    for part in parts:
+                        modified_contexts.append({'title': context['title'], 'text': self.tokenizer.decode(part), 'score': context['score']})
+            return modified_contexts[:self.n_context]
+
+        elif self.passage_mode == 'no-truncation-codex-last':
+            if self.is_append_question:
+                question_tokens_len = len(self.tokenizer(question)['input_ids'])
+                rule_context_len = self.text_maxlen - question_tokens_len
+            else:
+                rule_context_len = self.text_maxlen           
+            modified_contexts = []
+            count = 0
+            for context in contexts:
+                count += 1
+                if context['text']:
+                    tokens = self.tokenizer(context['text'])['input_ids']
+                    parts = list(self.divide_chunks(tokens, rule_context_len))
+                    if count == 17: # 16 + 1 as count is incremented before the if condition.
+                        codex_parts = parts
+                        continue                
+                    for part in parts:
+                        modified_contexts.append({'title': context['title'], 'text': self.tokenizer.decode(part), 'score': context['score']})
+            
+            contexts_before_codex = modified_contexts[:(self.n_context-len(codex_parts))]
+            for part in codex_parts:
+                contexts_before_codex.append({'title': context['title'], 'text': self.tokenizer.decode(part), 'score': context['score']})
+            return contexts_before_codex
 
     def __getitem__(self, index):
         example = self.examples[index]
@@ -53,9 +125,8 @@ class Dataset(torch.utils.data.Dataset):
         target = example['target']
 
         if 'ctxs' in example and self.n_context is not None:
-            example['ctxs'].sort(key=lambda x: float(x['score']), reverse=True)
             f = self.title_prefix + " {} " + self.passage_prefix + " {}"
-            contexts = example['ctxs'][:self.n_context]
+            contexts = self.get_contexts(example['ctxs'], question)
             passages = [f.format(c['title'], c['text']) for c in contexts]
             scores = [float(c['score']) for c in contexts]
             scores = torch.tensor(scores)
@@ -93,7 +164,9 @@ def encode_passages(batch_text_passages, tokenizer, max_length):
             max_length=max_length,
             padding='max_length',
             return_tensors='pt',
-            truncation=True
+            truncation=True,
+            # truncate from the beginning to keep the end of the passage which is the hole context.
+            truncation_side='left',
         )
         passage_ids.append(p['input_ids'][None])
         passage_masks.append(p['attention_mask'][None])
@@ -103,10 +176,11 @@ def encode_passages(batch_text_passages, tokenizer, max_length):
     return passage_ids, passage_masks.bool()
 
 class Collator(object):
-    def __init__(self, text_maxlength, tokenizer, answer_maxlength=20):
+    def __init__(self, text_maxlength, tokenizer, answer_maxlength=20, is_append_question=True):
         self.tokenizer = tokenizer
         self.text_maxlength = text_maxlength
         self.answer_maxlength = answer_maxlength
+        self.is_append_question = is_append_question
 
     def __call__(self, batch):
         assert(batch[0]['target'] != None)
@@ -126,7 +200,15 @@ class Collator(object):
         def append_question(example):
             if example['passages'] is None:
                 return [example['question']]
-            return [example['question'] + " " + t for t in example['passages']]
+            appended_passages = []
+            if self.is_append_question:
+                for t in example['passages']:
+                    # append the hole_context after the rule_context because we want completion to be conditioned on the hole_context.
+                    appended_passages.append(t + " " + example['question'])
+            else:
+                appended_passages = example['passages']
+            return appended_passages
+        
         text_passages = [append_question(example) for example in batch]
         passage_ids, passage_masks = encode_passages(text_passages,
                                                      self.tokenizer,

@@ -17,8 +17,8 @@ class Options():
         self.initialize_parser()
 
     def add_optim_options(self):
-        self.parser.add_argument('--warmup_steps', type=int, default=1000)
-        self.parser.add_argument('--total_steps', type=int, default=100000)
+        self.parser.add_argument('--warmup_steps', type=int, default=1) #1000
+        self.parser.add_argument('--total_steps', type=int, default=10) #100000
         self.parser.add_argument('--scheduler_steps', type=int, default=None, 
                         help='total number of step for the scheduler, if None then scheduler_total_step = total_step')
         self.parser.add_argument('--accumulation_steps', type=int, default=1)
@@ -49,6 +49,10 @@ class Options():
         self.parser.add_argument('--no_title', action='store_true', 
                         help='article titles not included in passages')
         self.parser.add_argument('--n_context', type=int, default=63)
+        self.parser.add_argument('--is_append_question', action='store_false', help='whether to append question to passage')
+        self.parser.add_argument('--passage_mode', type=str, default = 'truncation-direct', \
+                                    help = 'different modes of treating the passages. Options are truncation-direct, no-truncation-direct, \
+                                    truncation-random, no-truncation-codex-last, truncation-codex-last')
 
     def add_retriever_options(self):
         self.parser.add_argument('--train_data', type=str, default='none', help='path of train data')
@@ -86,11 +90,11 @@ class Options():
                         help="Main port (for multi-node SLURM jobs)")
         self.parser.add_argument('--seed', type=int, default=0, help="random seed for initialization")
         # training parameters
-        self.parser.add_argument('--eval_freq', type=int, default=500,
+        self.parser.add_argument('--eval_freq', type=int, default=4,
                         help='evaluate model every <eval_freq> steps during training')
-        self.parser.add_argument('--save_freq', type=int, default=5000,
+        self.parser.add_argument('--save_freq', type=int, default=2,
                         help='save model every <save_freq> steps during training')
-        self.parser.add_argument('--eval_print_freq', type=int, default=1000,
+        self.parser.add_argument('--eval_print_freq', type=int, default=1,
                         help='print intermdiate results of evaluation every <eval_print_freq> steps')
 
 
