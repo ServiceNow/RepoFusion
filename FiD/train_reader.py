@@ -29,7 +29,7 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
     if opt.is_main:
         try:
             import torch.utils.tensorboard
-            tb_logger = torch.utils.tensorboard.SummaryWriter(Path(opt.checkpoint_dir)/opt.name)
+            tb_logger = torch.utils.tensorboard.SummaryWriter(Path(checkpoint_path))
         except:
             tb_logger = None
             logger.warning('Tensorboard is not available.')
@@ -85,6 +85,9 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
                 logger.info(f"Evaluating on the full validation set.")
                 dev_loss, dev_em = evaluate(model, eval_dataset, tokenizer, collator, opt)
                 # calculate train EM only over the current batch to save computation.
+                ##########################
+                model = model.module if hasattr(model, "module") else model
+                ###########################
                 outputs = model.generate(input_ids=context_ids.cuda(),
                                         attention_mask=context_mask.cuda(),
                                         max_length=50)
@@ -189,6 +192,7 @@ def run(opt):
 
     model_name = opt.model_name + '-' +opt.model_size
     model_class = src.model.FiDT5
+    logger.info(f"Options: {opt}")
     logger.info(f"Model: {model_name}")
     logger.info(f"Checkpoint Path: {checkpoint_path}")
 
@@ -229,7 +233,8 @@ def run(opt):
                                     tokenizer=tokenizer, \
                                     passage_mode=opt.passage_mode, \
                                     is_append_question=opt.is_append_question, \
-                                    text_maxlen=opt.text_maxlength)
+                                    text_maxlen=opt.text_maxlength, \
+                                    num_of_examples=opt.num_of_eval_examples)
     logger.info(f'Loaded {len(eval_dataset)} validation examples from {opt.eval_data}')
 
     # Initialize the model and load from checkpoint if it exists.
@@ -266,9 +271,10 @@ def run(opt):
             find_unused_parameters=False,
         )
 
+    
     logger.info("Start training")
     # the training and evaluation loop.
-    # print(opt)
+
     train(
         model,
         optimizer,

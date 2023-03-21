@@ -17,8 +17,8 @@ class Options():
         self.initialize_parser()
 
     def add_optim_options(self):
-        self.parser.add_argument('--warmup_steps', type=int, default=1) #1000
-        self.parser.add_argument('--total_steps', type=int, default=10) #100000
+        self.parser.add_argument('--warmup_steps', type=int, default=1000) 
+        self.parser.add_argument('--total_steps', type=int, default=100000) 
         self.parser.add_argument('--scheduler_steps', type=int, default=None, 
                         help='total number of step for the scheduler, if None then scheduler_total_step = total_step')
         self.parser.add_argument('--accumulation_steps', type=int, default=1)
@@ -42,7 +42,7 @@ class Options():
         self.parser.add_argument('--eval_data', type=str, default='/repo_data/repo_preprocessed_data/small_val/', help='path of eval data')
         self.parser.add_argument('--model_size', type=str, default='base')
         self.parser.add_argument('--use_checkpoint', action='store_true', help='use checkpoint in the encoder')
-        self.parser.add_argument('--text_maxlength', type=int, default=512, 
+        self.parser.add_argument('--text_maxlength', type=int, default=512,  
                         help='maximum number of tokens in text segments (question+passage)')
         self.parser.add_argument('--answer_maxlength', type=int, default=-1, 
                         help='maximum number of tokens used to train the model, no truncation if -1')
@@ -53,6 +53,8 @@ class Options():
         self.parser.add_argument('--passage_mode', type=str, default = 'truncation-direct', \
                                     help = 'different modes of treating the passages. Options are truncation-direct, no-truncation-direct, \
                                     truncation-random, no-truncation-codex-last, truncation-codex-last')
+        self.parser.add_argument('--num_of_eval_examples', type=int, default=10000,  
+                        help='maximum number of examples to take from the eval dataset')
 
     def add_retriever_options(self):
         self.parser.add_argument('--train_data', type=str, default='none', help='path of train data')
@@ -90,11 +92,11 @@ class Options():
                         help="Main port (for multi-node SLURM jobs)")
         self.parser.add_argument('--seed', type=int, default=0, help="random seed for initialization")
         # training parameters
-        self.parser.add_argument('--eval_freq', type=int, default=4,
+        self.parser.add_argument('--eval_freq', type=int, default=500,
                         help='evaluate model every <eval_freq> steps during training')
-        self.parser.add_argument('--save_freq', type=int, default=2,
+        self.parser.add_argument('--save_freq', type=int, default=5000,
                         help='save model every <save_freq> steps during training')
-        self.parser.add_argument('--eval_print_freq', type=int, default=1,
+        self.parser.add_argument('--eval_print_freq', type=int, default=1000,
                         help='print intermdiate results of evaluation every <eval_print_freq> steps')
 
 

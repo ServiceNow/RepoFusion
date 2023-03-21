@@ -1,5 +1,5 @@
 resources:
-  cpu: 8
+  cpu: 16
   mem: 64
-  gpu: 2
+  gpu: 6
   gpuMem: 80

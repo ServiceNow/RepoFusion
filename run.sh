@@ -11,7 +11,7 @@ fi
 
 launcher=python
 command=$1
-eai_user_name=`eai user get --field name`
+eai_user_name=`eai account get --field name`
 base_command=${command%.*}
 job_config_file=$base_command.yaml
 launcher_args="$@"

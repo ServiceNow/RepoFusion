@@ -22,9 +22,11 @@ class Dataset(torch.utils.data.Dataset):
                  passage_mode='truncation-direct',
                  text_maxlen=512,
                  tokenizer=None, 
-                 is_append_question=True):
+                 is_append_question=True, 
+                 num_of_examples=-1):
         assert data_path
         examples = []
+        count = 0
         # each example is a json object that consists of data for a single hole. We load the json object later for efficiency.
         for dp, dn, filenames in os.walk(data_path):
             for f in filenames:
@@ -37,6 +39,9 @@ class Dataset(torch.utils.data.Dataset):
                         if global_rank > -1 and not i % world_size == global_rank:
                             continue
                         examples.append(line.strip())
+                        count += 1
+                        if count > num_of_examples and num_of_examples>0:
+                            break
                     #data_path.close()
 
         print('Loaded {} examples with global rank {} and world size {}'.format(len(examples), global_rank, world_size))
