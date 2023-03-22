@@ -5,15 +5,20 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "true"
+#os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:1024"
+
 import time
 import sys
 import torch
-import transformers
+import transformers#
 import numpy as np
 from pathlib import Path
 from torch.utils.data import DataLoader, RandomSampler, DistributedSampler, SequentialSampler
 from src.options import Options
 import multiprocessing
+from transformers import StoppingCriteriaList
 
 import src.slurm
 import src.util
@@ -21,10 +26,17 @@ import src.evaluation
 import src.data
 import src.model
 
-import os
-os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
-def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, collator, best_dev_em, checkpoint_path, tokenizer, logger):
+def generate_and_calculate_em(model, tokenizer, dataset, idx, context_ids, context_mask, stopping_criteria):
+    model = model.module if hasattr(model, "module") else model
+    outputs = model.generate(input_ids=context_ids.cuda(),
+                            attention_mask=context_mask.cuda())
+                            # #max_length=10
+                            # stopping_criteria=stopping_criteria)
+    exactmatch, total, (sample_ans, sample_gold) = src.evaluation.get_batch_exactmatch(outputs, tokenizer, dataset, idx)
+    return exactmatch, total, (sample_ans, sample_gold)
+
+def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, collator, best_dev_em, checkpoint_path, tokenizer, logger, stopping_criteria):
     global torch
     if opt.is_main:
         try:
@@ -53,6 +65,9 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
         epoch += 1
         for i, batch in enumerate(train_dataloader):
             step += 1
+            if step % 100 == 0:
+                logger.info(f"Step {step} / {opt.total_steps}")
+
             (idx, labels, _, context_ids, context_mask) = batch
             # print("context_ids", context_ids.shape)
             # print("context_mask", context_mask.shape)
@@ -65,8 +80,6 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
                 labels=labels.cuda(),
                 return_dict=False
             )[0]
-
-            #print(train_loss)
 
             train_loss.backward()
 
@@ -83,15 +96,10 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
             if step % opt.eval_freq == 0:
                 # the validation loss and EM are calculted over the whole validation dataset.
                 logger.info(f"Evaluating on the full validation set.")
-                dev_loss, dev_em = evaluate(model, eval_dataset, tokenizer, collator, opt)
+                dev_loss, dev_em = evaluate(model, eval_dataset, tokenizer, collator, opt, stopping_criteria)
                 # calculate train EM only over the current batch to save computation.
-                ##########################
-                model = model.module if hasattr(model, "module") else model
-                ###########################
-                outputs = model.generate(input_ids=context_ids.cuda(),
-                                        attention_mask=context_mask.cuda(),
-                                        max_length=50)
-                exactmatch, total, (sample_ans, sample_gold) = src.evaluation.get_batch_exactmatch(outputs, tokenizer, train_dataset, idx)
+                exactmatch, total, (sample_ans, sample_gold) = generate_and_calculate_em(model, tokenizer, train_dataset, idx, 
+                                                                                            context_ids, context_mask, stopping_criteria)
                 sample_train_em, _ = src.util.weighted_average(np.mean(exactmatch), total, opt)
 
                 model.train()
@@ -125,7 +133,7 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
                 break
     logger.info(f"Training finished after {epoch} epochs and {step} steps.")
 
-def evaluate(model, dataset, tokenizer, collator, opt):
+def evaluate(model, dataset, tokenizer, collator, opt, stopping_criteria):
     # sample sequntially for evaluation.
     sampler = SequentialSampler(dataset)
     dataloader = DataLoader(dataset,
@@ -140,7 +148,6 @@ def evaluate(model, dataset, tokenizer, collator, opt):
     exactmatch = []
     curr_loss = 0.0
     count = 0
-    model = model.module if hasattr(model, "module") else model
     with torch.no_grad():
         for i, batch in enumerate(dataloader):
             count += 1
@@ -157,16 +164,11 @@ def evaluate(model, dataset, tokenizer, collator, opt):
             #print(eval_loss)
             curr_loss += eval_loss.item()
             
-            outputs = model.generate(
-                input_ids=context_ids.cuda(),
-                attention_mask=context_mask.cuda(),
-                max_length=50
-            )
-
-            exactmatch, total, _ = src.evaluation.get_batch_exactmatch(outputs, tokenizer, dataset, idx, total, exactmatch)
+            em, count, _ = generate_and_calculate_em(model, tokenizer, dataset, idx, context_ids, context_mask, stopping_criteria)
+            exactmatch.append(em)
+            total += count
 
     exactmatch, total = src.util.weighted_average(np.mean(exactmatch), total, opt)
-
     return curr_loss/count, exactmatch
 
 def run(opt):
@@ -210,6 +212,10 @@ def run(opt):
     
     # Set the tokenizer and initialize the collator.
     tokenizer = transformers.RobertaTokenizer.from_pretrained(model_name)
+    stop_words = ["\n"]
+    stop_words_ids = [tokenizer(stop_word, return_tensors='pt')['input_ids'].squeeze() for stop_word in stop_words]
+    stopping_criteria = StoppingCriteriaList([src.util.StoppingCriteriaSub(stops=stop_words_ids)])
+
     collator = src.data.Collator(text_maxlength=opt.text_maxlength, \
                                     tokenizer=tokenizer, \
                                     answer_maxlength=opt.answer_maxlength,
@@ -287,7 +293,8 @@ def run(opt):
         best_dev_em,
         checkpoint_path,
         tokenizer,
-        logger
+        logger,
+        stopping_criteria,
     )
 
 if __name__ == "__main__":

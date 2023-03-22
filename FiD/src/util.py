@@ -13,8 +13,22 @@ import json
 from pathlib import Path
 import torch.distributed as dist
 import csv
+from transformers import StoppingCriteria
 
 logger = logging.getLogger(__name__)
+
+class StoppingCriteriaSub(StoppingCriteria):
+
+    def __init__(self, stops = [], encounters=1):
+        super().__init__()
+        self.stops = [stop.to("cuda") for stop in stops]
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor):
+        for stop in self.stops:
+            if torch.all((stop == input_ids[0][-len(stop):])).item():
+                return True
+
+        return False
 
 def init_logger(is_main=True, is_distributed=False, filename=None):
     if is_distributed:
