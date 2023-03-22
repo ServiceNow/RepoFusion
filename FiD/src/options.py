@@ -53,7 +53,7 @@ class Options():
         self.parser.add_argument('--passage_mode', type=str, default = 'truncation-direct', \
                                     help = 'different modes of treating the passages. Options are truncation-direct, no-truncation-direct, \
                                     truncation-random, no-truncation-codex-last, truncation-codex-last')
-        self.parser.add_argument('--num_of_eval_examples', type=int, default=10000,  
+        self.parser.add_argument('--num_of_eval_examples_per_gpu', type=int, default=5000,  
                         help='maximum number of examples to take from the eval dataset')
 
     def add_retriever_options(self):
@@ -92,12 +92,12 @@ class Options():
                         help="Main port (for multi-node SLURM jobs)")
         self.parser.add_argument('--seed', type=int, default=0, help="random seed for initialization")
         # training parameters
-        self.parser.add_argument('--eval_freq', type=int, default=500,
-                        help='evaluate model every <eval_freq> steps during training')
-        self.parser.add_argument('--save_freq', type=int, default=5000,
+        self.parser.add_argument('--eval_loss_freq', type=int, default=5000,
+                        help='evaluate model loss every <eval_freq> steps during training')
+        self.parser.add_argument('--save_freq', type=int, default=10000,
                         help='save model every <save_freq> steps during training')
-        self.parser.add_argument('--eval_print_freq', type=int, default=500,
-                        help='print intermdiate results of evaluation every <eval_print_freq> steps')
+        self.parser.add_argument('--eval_em_freq', type=int, default=10000,
+                        help='evaluate model EM every <eval_em_freq> steps')
 
 
     def print_options(self, opt):

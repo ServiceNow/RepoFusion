@@ -33,8 +33,17 @@ def generate_and_calculate_em(model, tokenizer, dataset, idx, context_ids, conte
                             attention_mask=context_mask.cuda())
                             # #max_length=10
                             # stopping_criteria=stopping_criteria)
-    exactmatch, total, (sample_ans, sample_gold) = src.evaluation.get_batch_exactmatch(outputs, tokenizer, dataset, idx)
-    return exactmatch, total, (sample_ans, sample_gold)
+    total = 0
+    exactmatch = []
+    for k, o in enumerate(outputs):
+        ans = tokenizer.decode(o, skip_special_tokens=True)
+        gold = dataset.get_example(idx[k])['target']
+        score = src.evaluation.em_code(ans, gold)
+        #print('ans:{}, gold:{}, score:{}'.format(ans, gold, score))
+        total += 1
+        exactmatch.append(score)
+
+    return exactmatch, total, (ans, gold)
 
 def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, collator, best_dev_em, checkpoint_path, tokenizer, logger, stopping_criteria):
     global torch
@@ -93,47 +102,88 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
             # the training loss is calculated over the whole batch.
             curr_loss += train_loss.item()
 
-            if step % opt.eval_freq == 0:
+            if step % opt.eval_loss_freq == 0:
                 # the validation loss and EM are calculted over the whole validation dataset.
-                logger.info(f"Evaluating on the full validation set.")
-                dev_loss, dev_em = evaluate(model, eval_dataset, tokenizer, collator, opt, stopping_criteria)
-                # calculate train EM only over the current batch to save computation.
-                exactmatch, total, (sample_ans, sample_gold) = generate_and_calculate_em(model, tokenizer, train_dataset, idx, 
-                                                                                            context_ids, context_mask, stopping_criteria)
-                sample_train_em, _ = src.util.weighted_average(np.mean(exactmatch), total, opt)
-
+                logger.info(f"Evaluating validation set loss")
+                dev_loss = evaluate_loss(model, eval_dataset, collator, opt)
                 model.train()
-                # Save the checkpoint based on performance on validation EM. Save the metrics to tensorboard and logs.
                 if opt.is_main:
-                    if dev_em > best_dev_em:
-                        best_dev_em = dev_em
-                        src.util.save(model, optimizer, scheduler, step, best_dev_em,
-                                  opt, checkpoint_path, 'best_dev')
-                    logger.info(f"Saving best dev EM checkpoint to {checkpoint_path}")
                     log = f"{step} / {opt.total_steps} |"
-                    log += f"training loss: {curr_loss/opt.eval_freq:.3f} |"
+                    log += f"training loss: {curr_loss/opt.eval_loss_freq:.3f} |"
                     log += f"validation loss: {dev_loss} |"
-                    log += f"sample training EM: {100*sample_train_em:.2f}EM |"
-                    log += f"evaluation EM: {100*dev_em:.2f}EM |"
                     log += f"lr: {scheduler.get_last_lr()[0]:.5f}"
                     logger.info(log)    
                     if tb_logger is not None:
                         tb_logger.add_scalar("Evaluation Loss", dev_loss, step)
-                        tb_logger.add_scalar("Training Loss", curr_loss / (opt.eval_freq), step)
+                        tb_logger.add_scalar("Training Loss", curr_loss / (opt.eval_loss_freq), step)
+                    curr_loss = 0.
+
+            if step % opt.eval_em_freq == 0:
+                dev_em = evaluate_em(model, eval_dataset, tokenizer, collator, opt, stopping_criteria)
+                # calculate train EM only over the current batch to save computation.
+                exactmatch, total, (sample_ans, sample_gold) = generate_and_calculate_em(model, tokenizer, \
+                                                                                        train_dataset, idx, \
+                                                                                        context_ids, context_mask,\
+                                                                                        stopping_criteria)
+                sample_train_em, _ = src.util.weighted_average(np.mean(exactmatch), total, opt)
+                model.train()
+
+                if opt.is_main:
+                    if dev_em > best_dev_em:
+                        best_dev_em = dev_em
+                        src.util.save(model, optimizer, scheduler, step, best_dev_em,
+                                    opt, checkpoint_path, 'best_dev')
+                    logger.info(f"Saving best dev EM checkpoint to {checkpoint_path}")
+                    log = f"{step} / {opt.total_steps} |"
+                    log += f"sample training EM: {100*sample_train_em:.2f}EM |"
+                    log += f"evaluation EM: {100*dev_em:.2f}EM |"
+                    logger.info(log)    
+                    if tb_logger is not None:
                         tb_logger.add_scalar("Evaluation EM", dev_em, step)
                         tb_logger.add_scalar("Training EM", sample_train_em, step)
-                        tb_logger.add_text("Training Sample Predictions", str({'pred': sample_ans, 'gold': sample_gold}), step)
-                    curr_loss = 0.
+                        tb_logger.add_text("Training Sample Predictions", \
+                                        str({'pred': sample_ans, 'gold': sample_gold}), step)
 
             if opt.is_main and step % opt.save_freq == 0:
                 src.util.save(model, optimizer, scheduler, step, best_dev_em,
                           opt, checkpoint_path, f"step-{step}")
                 logger.info(f"Saving checkpoint to {checkpoint_path}")
+
             if step > opt.total_steps:
                 break
     logger.info(f"Training finished after {epoch} epochs and {step} steps.")
 
-def evaluate(model, dataset, tokenizer, collator, opt, stopping_criteria):
+def evaluate_loss(model, dataset, collator, opt):
+    # sample sequntially for evaluation.
+    sampler = SequentialSampler(dataset)
+    dataloader = DataLoader(dataset,
+        sampler=sampler,
+        batch_size=opt.per_gpu_batch_size,
+        drop_last=False,
+        num_workers=min(max(multiprocessing.cpu_count()-1, 1), 10),
+        collate_fn=collator
+    )
+    model.eval()
+    step = 0
+    curr_loss = 0.0
+    with torch.no_grad():
+        for i, batch in enumerate(dataloader):
+            step += 1
+            (idx, labels, _, context_ids, context_mask) = batch
+
+            eval_loss = model(
+                input_ids=context_ids.cuda(),
+                attention_mask=context_mask.cuda(),
+                labels=labels.cuda(),
+                return_dict=False
+            )[0]
+
+            eval_loss = src.util.average_main(eval_loss, opt)
+            #print(eval_loss)
+            curr_loss += eval_loss.item() 
+    return curr_loss / step
+    
+def evaluate_em(model, dataset, tokenizer, collator, opt, stopping_criteria):
     # sample sequntially for evaluation.
     sampler = SequentialSampler(dataset)
     dataloader = DataLoader(dataset,
@@ -146,30 +196,18 @@ def evaluate(model, dataset, tokenizer, collator, opt, stopping_criteria):
     model.eval()
     total = 0
     exactmatch = []
-    curr_loss = 0.0
-    count = 0
     with torch.no_grad():
         for i, batch in enumerate(dataloader):
-            count += 1
             (idx, labels, _, context_ids, context_mask) = batch
-
-            eval_loss = model(
-                input_ids=context_ids.cuda(),
-                attention_mask=context_mask.cuda(),
-                labels=labels.cuda(),
-                return_dict=False
-            )[0]
-
-            eval_loss = src.util.average_main(eval_loss, opt)
-            #print(eval_loss)
-            curr_loss += eval_loss.item()
-            
-            em, count, _ = generate_and_calculate_em(model, tokenizer, dataset, idx, context_ids, context_mask, stopping_criteria)
-            exactmatch.append(em)
+            em, count, _ = generate_and_calculate_em(model, tokenizer, dataset, \
+                                                    idx, context_ids, context_mask, stopping_criteria)
+            #print("EM:{em}, count:{count}, step: {step}".format(em=em, count=count, step=step))
+            exactmatch.extend(em)
             total += count
+            #print("total:{total}".format(total=total))
 
     exactmatch, total = src.util.weighted_average(np.mean(exactmatch), total, opt)
-    return curr_loss/count, exactmatch
+    return exactmatch
 
 def run(opt):
     torch.manual_seed(opt.seed)
@@ -240,7 +278,7 @@ def run(opt):
                                     passage_mode=opt.passage_mode, \
                                     is_append_question=opt.is_append_question, \
                                     text_maxlen=opt.text_maxlength, \
-                                    num_of_examples=opt.num_of_eval_examples)
+                                    num_of_examples=opt.num_of_eval_examples_per_gpu)
     logger.info(f'Loaded {len(eval_dataset)} validation examples from {opt.eval_data}')
 
     # Initialize the model and load from checkpoint if it exists.
