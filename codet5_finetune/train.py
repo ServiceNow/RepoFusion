@@ -53,9 +53,9 @@ def prepare(opt):
     if opt.debug:
         ctx.ds_pivots = get_debug_pivot_sets(ctx.ds_pivots, opt)
         assert_debug_data(ctx, opt)
-
-    # cap validation for 10K for now for speed
-    ctx.ds_pivots["validation"] = ctx.ds_pivots["validation"].shuffle(seed=opt.seed).select(range(10000))
+    else:
+        # cap validation for 10K for now for speed
+        ctx.ds_pivots["validation"] = ctx.ds_pivots["validation"].shuffle(seed=opt.seed).select(range(10000))
 
     print(f'{len(ctx.ds_pivots["train"])=}')
     print(f'{len(ctx.ds_pivots["validation"])=}')
@@ -73,9 +73,9 @@ def prepare(opt):
     )
 
     opt.model_dir_base = Path(opt.model_dir_base)
-    model_dir = opt.model_dir_base  / opt.trained_model_name / opt.experiment_name
+    ctx.model_dir = opt.model_dir_base  / opt.trained_model_name / opt.experiment_name
 
-    examples_dir = model_dir / 'examples'
+    examples_dir =ctx.model_dir / 'examples'
     examples_dir.mkdir(parents=True, exist_ok=True)
 
 
@@ -86,7 +86,7 @@ def prepare(opt):
     assert opt.save_steps % opt.eval_steps == 0
 
     ctx.args = Seq2SeqTrainingArguments(
-        model_dir,
+        ctx.model_dir,
         evaluation_strategy=opt.evaluation_strategy,
         eval_steps=opt.eval_steps,
         # to enable saving of best model according to docs
@@ -184,7 +184,11 @@ def prepare(opt):
     
     
 def run(ctx):
-    ctx.trainer.train()
+    ctx.trainer.train(
+        resume_from_checkpoint=any(
+            dir.startswith("checkpoint") for dir in os.listdir(ctx.model_dir)
+        )
+    )
 
 if __name__ == '__main__':
     opt = options()
