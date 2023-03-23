@@ -201,7 +201,7 @@ def prepare(opt):
         if opt.is_main:
             # in case the fuction is called on all processes, will work on one node only
             pid = os.getpid()
-            step = len(examples_dir.glob('*.json'))
+            step = len(list(examples_dir.glob('*.json')))
             example_file = examples_dir / f'{step}_{pid}.json'
             with example_file.open('wt') as f:
                 json.dump(examples, f)
