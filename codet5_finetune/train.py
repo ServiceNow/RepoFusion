@@ -196,10 +196,7 @@ def prepare(opt):
                 for input, label, prediction in zip(inputs[:sz], labels_first_line[:sz], predictions_first_line[:sz])
             ]
         }
-        # TODO: get step from trainer or create run specific prefix
-        #       now overwrites on restart
         if opt.is_main:
-            # in case the fuction is called on all processes, will work on one node only
             pid = os.getpid()
             step = len(list(examples_dir.glob('*.json')))
             example_file = examples_dir / f'{step}_{pid}.json'
