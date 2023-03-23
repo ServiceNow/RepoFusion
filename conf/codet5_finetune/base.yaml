@@ -1,18 +1,18 @@
 # Data preparation params
 filename_1K_20plus_file_list: /data/hf_repos/the-stak-repo-level/meta_data/java/1K_20plus_file_list.parquet
 filename_the_stack11_dedup_alt_comments: /data/christmas_datasets/the_stack_dedup_alt_comments.jsonl
-path_java_filtered: /repo_data/the_stack11_dedup_alt_comments_no_1K_set/data
-path_java_filtered_subset: /repo_data/the_stack11_dedup_alt_comments_no_1K_set_subset/data
-path_java_filtered_subset_pivots: /repo_data/the_stack11_dedup_alt_comments_no_1K_set_subset/pivots
-repo_names_rand_seq_filename: /repo_data/the_stack11_dedup_alt_comments_no_1K_set_subset/repo_names_rand_seq.json
-splits_filename: /repo_data/the_stack11_dedup_alt_comments_no_1K_set_subset/splits_repo_names.json
-regenerate_repo_names_rand_seq: False
+path_java_filtered_subset_root:  /repo_data/the_stack11_dedup_alt_comments_no_1K_set_subset
+java_filtered_subset_data_dir: data
+java_filtered_subset_pivots_dir: pivots
+repo_names_rand_seq_filename: repo_names_rand_seq.json
+splits_filename: splits_repo_names.json
+regenerate: False
 min_file_count_per_repo: 20
 pivots_per_file: 10
 max_pivots_per_repository: 10000
 bucket_size: 400000
-train_size: 300000
-train_ex_size: 30000000
+# -1 means all the remained data left after validation and test splits
+train_size: -1
 validation_size: 100000
 test_size: 100000
 num_proc: 8
@@ -29,10 +29,10 @@ eval_split: validation
 logging_strategy: steps
 logging_steps: 100
 save_strategy: steps
-save_steps: 200
+save_steps: 1000
 save_total_limit: 3
 evaluation_strategy: steps
-eval_steps: 100
+eval_steps: 1000
 metric_for_best_model: em_a2p_ratio
 greater_is_better: True
 predict_with_generate: True
@@ -47,8 +47,8 @@ min_encoder_seq_length: 0
 min_decoder_seq_length: 0
 encoder_seq_length: 512
 decoder_seq_length: 512
-eval_generate_seq_length: 512
-evel_generate_use_eol_stop_tokens: False
+eval_generate_seq_length: 100
+evel_generate_use_eol_stop_tokens: True
 
 # if wold have been perfect 4e-6 and several epochs
 num_train_epochs: 1

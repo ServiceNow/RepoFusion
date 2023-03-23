@@ -74,11 +74,17 @@ def prepare(opt):
 
     print(f'{opt.per_device_train_batch_size=}')
 
-    ctx.ds_data = datasets.load_from_disk(opt.path_java_filtered_subset)
+    opt.path_java_filtered_subset_root = Path(opt.path_java_filtered_subset_root)
+
+    ctx.ds_data = datasets.load_from_disk(
+        opt.path_java_filtered_subset_root / opt.java_filtered_subset_data_dir
+    )
     print(f'{len(ctx.ds_data[opt.training_split])=}')
     print(f'{len(ctx.ds_data[opt.eval_split])=}')
 
-    ctx.ds_pivots = datasets.load_from_disk(opt.path_java_filtered_subset_pivots)
+    ctx.ds_pivots = datasets.load_from_disk(
+        opt.path_java_filtered_subset_root / opt.java_filtered_subset_pivots_dir
+    )
     if opt.debug:
         ctx.ds_pivots = get_debug_pivot_sets(ctx.ds_pivots, opt)
         assert_debug_data(ctx, opt)
@@ -104,7 +110,7 @@ def prepare(opt):
     opt.model_dir_base = Path(opt.model_dir_base)
     ctx.model_dir = opt.model_dir_base  / opt.trained_model_name / opt.experiment_name
 
-    examples_dir =ctx.model_dir / 'examples'
+    examples_dir = ctx.model_dir / 'examples'
     examples_dir.mkdir(parents=True, exist_ok=True)
 
 
