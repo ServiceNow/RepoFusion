@@ -4,15 +4,24 @@ from pathlib import Path
 import torch
 import numpy as np
 
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 import json
 
 import datasets
-import transformers
-from transformers import AutoTokenizer
-from transformers import AutoModelForSeq2SeqLM, Seq2SeqTrainingArguments, Seq2SeqTrainer
+from torch.utils.data import Dataset
+from transformers import (
+    AutoTokenizer, AutoModelForSeq2SeqLM,
+    Seq2SeqTrainingArguments, Seq2SeqTrainer,
+    StoppingCriteriaList
+)
 
 from codet5_finetune.options import options
-from codet5_finetune.util import set_global_seeds
+from codet5_finetune.util import (
+    set_global_seeds,
+    StoppingCriteriaTokenIds,
+    set_distributed_options,
+)
 from codet5_finetune.data import DataCollatorNTP, get_debug_pivot_sets, assert_debug_data
 
 step = 0
@@ -40,14 +49,34 @@ def average_exact_match_a2p_ratio(predictions, labels):
 def exact_matches_ratio(a, b):
     return sum(el_a == el_b for el_a, el_b in zip(a, b)) / len(a)
 
+
+class Trainer42(Seq2SeqTrainer):
+    stopping_criteria_list = None
+    def evaluate(
+        self,
+        eval_dataset: Optional[Dataset] = None,
+        ignore_keys: Optional[List[str]] = None,
+        metric_key_prefix: str = "eval",
+        **gen_kwargs,
+    ) -> Dict[str, float]:
+        if self.stopping_criteria_list is not None:
+            gen_kwargs['stopping_criteria'] = self.stopping_criteria_list
+        super().evaluate(
+            eval_dataset,
+            ignore_keys=ignore_keys,
+            metric_key_prefix=metric_key_prefix,
+            **gen_kwargs
+        )
+        
+
 def prepare(opt):
     ctx = type('Ctx', (), {})()
 
     print(f'{opt.per_device_train_batch_size=}')
 
     ctx.ds_data = datasets.load_from_disk(opt.path_java_filtered_subset)
-    print(f'{len(ctx.ds_data["train"])=}')
-    print(f'{len(ctx.ds_data["validation"])=}')
+    print(f'{len(ctx.ds_data[opt.training_split])=}')
+    print(f'{len(ctx.ds_data[opt.eval_split])=}')
 
     ctx.ds_pivots = datasets.load_from_disk(opt.path_java_filtered_subset_pivots)
     if opt.debug:
@@ -55,10 +84,10 @@ def prepare(opt):
         assert_debug_data(ctx, opt)
     else:
         # cap validation for 10K for now for speed
-        ctx.ds_pivots["validation"] = ctx.ds_pivots["validation"].shuffle(seed=opt.seed).select(range(10000))
+        ctx.ds_pivots[opt.eval_split] = ctx.ds_pivots[opt.eval_split].shuffle(seed=opt.seed).select(range(10000))
 
-    print(f'{len(ctx.ds_pivots["train"])=}')
-    print(f'{len(ctx.ds_pivots["validation"])=}')
+    print(f'{len(ctx.ds_pivots[opt.training_split])=}')
+    print(f'{len(ctx.ds_pivots[opt.eval_split])=}')
 
     ctx.tokenizer = AutoTokenizer.from_pretrained(opt.base_model_name)
 
@@ -94,8 +123,8 @@ def prepare(opt):
         metric_for_best_model=opt.metric_for_best_model,
         greater_is_better=opt.greater_is_better,
         predict_with_generate=opt.predict_with_generate,
-        # max generation lenght to be the same as decoder seq lenght for training
-        generation_max_length = opt.decoder_seq_length, 
+        # max generation lenght in eval predictions
+        generation_max_length = opt.eval_generate_seq_length, 
         include_inputs_for_metrics=opt.include_inputs_for_metrics,
         logging_strategy=opt.logging_strategy,
         logging_steps=opt.logging_steps,
@@ -105,6 +134,7 @@ def prepare(opt):
         per_device_eval_batch_size=opt.per_device_eval_batch_size,
         learning_rate=opt.learning_rate,# if would have been perfect 4e-6 and several epochs
         weight_decay=opt.weight_decay,
+        lr_scheduler_type=opt.lr_scheduler_type,
         warmup_steps=opt.warmup_steps,
         save_total_limit=opt.save_total_limit,
         num_train_epochs=opt.num_train_epochs,
@@ -155,13 +185,16 @@ def prepare(opt):
                 for input, label, prediction in zip(inputs[:sz], labels_first_line[:sz], predictions_first_line[:sz])
             ]
         }
+        # TODO: get step from trainer or create run specific prefix
+        #       now overwrites on restart
         global step
-        # in case the fuction is called on all processes, will work on one node only
-        pid = os.getpid()
-        example_file = examples_dir / f'{step}_{pid}.json'
-        with example_file.open('wt') as f:
-            json.dump(examples, f)
-        step += 1
+        if opt.is_main:
+            # in case the fuction is called on all processes, will work on one node only
+            pid = os.getpid()
+            example_file = examples_dir / f'{step}_{pid}.json'
+            with example_file.open('wt') as f:
+                json.dump(examples, f)
+            step += 1
 
         return {
             'em_ratio': exact_matches_ratio(predictions, labels),
@@ -170,16 +203,21 @@ def prepare(opt):
             #'examples': str(examples)
         }
     
-    ctx.trainer = Seq2SeqTrainer(
+    ctx.trainer = Trainer42(   
         model_init=model_init,
         args=ctx.args,
-        train_dataset=ctx.ds_pivots['train'],
-        eval_dataset=ctx.ds_pivots['validation'],
+        train_dataset=ctx.ds_pivots[opt.training_split],
+        eval_dataset=ctx.ds_pivots[opt.eval_split],
         data_collator=ctx.data_collator,
         tokenizer=ctx.tokenizer,
         compute_metrics=compute_metrics
     )
-    
+
+    if opt.evel_generate_use_eol_stop_tokens:
+        ctx.trainer.stopping_criteria_list = StoppingCriteriaList([
+            StoppingCriteriaTokenIds(stop_ids=[2, 203, 206], device=opt.device)
+        ])
+
     return ctx
     
     
@@ -192,6 +230,7 @@ def run(ctx):
 
 if __name__ == '__main__':
     opt = options()
+    opt = set_distributed_options(opt)
     set_global_seeds(opt)
     ctx = prepare(opt)
     run(ctx)

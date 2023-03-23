@@ -12,6 +12,7 @@ pivots_per_file: 10
 max_pivots_per_repository: 10000
 bucket_size: 400000
 train_size: 300000
+train_ex_size: 30000000
 validation_size: 100000
 test_size: 100000
 num_proc: 8
@@ -21,6 +22,10 @@ seed: 42
 base_model_name: Salesforce/codet5-base
 trained_model_name: codet5-base-ntp-java
 model_dir_base: /repo_data/finetuning_checkpoints
+# the split name must match between data and pivots
+training_split: train
+eval_split: validation
+
 logging_strategy: steps
 logging_steps: 100
 save_strategy: steps
@@ -42,12 +47,15 @@ min_encoder_seq_length: 0
 min_decoder_seq_length: 0
 encoder_seq_length: 512
 decoder_seq_length: 512
+eval_generate_seq_length: 512
+evel_generate_use_eol_stop_tokens: False
 
 # if wold have been perfect 4e-6 and several epochs
 num_train_epochs: 1
 per_device_train_batch_size: 8
 per_device_eval_batch_size: 8
 learning_rate: 4.0e-5 
+lr_scheduler_type: linear
 warmup_steps: 100
 weight_decay: 0.01
 
