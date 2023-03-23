@@ -46,8 +46,12 @@ def average_exact_match_a2p_ratio(predictions, labels):
         for p, l in zip(predictions, labels)
     ) / len(labels)
 
-def exact_matches_ratio(a, b):
-    return sum(el_a == el_b for el_a, el_b in zip(a, b)) / len(a)
+def exact_matches_ratio(a, b, include_empty_matches):
+    def comp(a, b):
+        if not include_empty_matches and (len(a) == 0 and len(b) == 0):
+            return False
+        return a == b
+    return sum(comp(el_a, el_b) for el_a, el_b in zip(a, b)) / len(a)
 
 
 class Trainer42(Seq2SeqTrainer):
@@ -194,19 +198,19 @@ def prepare(opt):
         }
         # TODO: get step from trainer or create run specific prefix
         #       now overwrites on restart
-        global step
         if opt.is_main:
             # in case the fuction is called on all processes, will work on one node only
             pid = os.getpid()
+            step = len(examples_dir.glob('*.json'))
             example_file = examples_dir / f'{step}_{pid}.json'
             with example_file.open('wt') as f:
                 json.dump(examples, f)
-            step += 1
 
         return {
-            'em_ratio': exact_matches_ratio(predictions, labels),
-            'em_a2p_ratio': average_exact_match_a2p_ratio(predictions, labels),
-            'em_first_line_ratio': exact_matches_ratio(labels_first_line, predictions_first_line),
+            #'em_ratio': exact_matches_ratio(predictions, labels),
+            #'em_a2p_ratio': average_exact_match_a2p_ratio(predictions, labels),
+            'em_first_line_ratio': exact_matches_ratio(labels_first_line, predictions_first_line, include_empty_matches=True),
+            'em_first_line_ratio_wo_empty_matches': exact_matches_ratio(labels_first_line, predictions_first_line, include_empty_matches=False),
             #'examples': str(examples)
         }
     
@@ -229,10 +233,14 @@ def prepare(opt):
     
     
 def run(ctx):
+    has_checkpoints = any(
+        dir.startswith("checkpoint") for dir in os.listdir(ctx.model_dir)
+    )
+    # Evaluate not trained model
+    if not has_checkpoints:
+        ctx.trainer.evaluate()
     ctx.trainer.train(
-        resume_from_checkpoint=any(
-            dir.startswith("checkpoint") for dir in os.listdir(ctx.model_dir)
-        )
+        resume_from_checkpoint=has_checkpoints
     )
 
 if __name__ == '__main__':
