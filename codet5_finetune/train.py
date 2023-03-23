@@ -136,6 +136,7 @@ def prepare(opt):
         logging_steps=opt.logging_steps,
         save_strategy=opt.save_strategy,
         save_steps=opt.save_steps,
+        gradient_accumulation_steps=opt.gradient_accumulation_steps,
         per_device_train_batch_size=opt.per_device_train_batch_size,
         per_device_eval_batch_size=opt.per_device_eval_batch_size,
         learning_rate=opt.learning_rate,# if would have been perfect 4e-6 and several epochs
