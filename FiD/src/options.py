@@ -57,8 +57,41 @@ class Options():
                         help='maximum number of examples to take from the eval dataset')
 
     def add_retriever_options(self):
+        # NOTE: either specify train_data and eval_data to load with custom implementation or 
+        #       dataset_path to load with hugging face functionality, but not both
         self.parser.add_argument('--train_data', type=str, default='none', help='path of train data')
         self.parser.add_argument('--eval_data', type=str, default='none', help='path of eval data')
+        self.parser.add_argument(
+            '--dataset_path', type=str, default='none',
+            help='path to a dataset to be loaded with hugging face funcionality'
+        )
+        self.parser.add_argument(
+            '--train_split_name', type=str, default='train',
+            help='training split name to be loaded with hugging face funcionality'
+        )
+        self.parser.add_argument(
+            '--eval_split_name', type=str, default='val',
+            help='eval split name to be loaded with hugging face funcionality'
+        )
+        self.parser.add_argument(
+            '--features_format_file',
+            type=str, default='hf_dataset_features_format.json',
+            help='dataset format file path either relative to dataset_path or absolute'
+        )
+        self.parser.add_argument(
+            '--data_file_pattern',
+            type=str, default='*/hole_and_rule_contexts.json',
+            help='data files pattern to look for inside split folder'
+        )
+        self.parser.add_argument(
+            '--hf_datasets_load_num_proc', type=int, default=1, 
+            help='number of processes to use to load dataset, speeds up creation of the dataset cahche'
+        )
+        self.parser.add_argument(
+            '--hf_datasets_cache_dir',
+            type=str, default='/repo_data/hf_datasets_cashe',
+            help='forder path to use as datasets chache, None will result in default'
+        )
         self.parser.add_argument('--indexing_dimension', type=int, default=768)
         self.parser.add_argument('--no_projection', action='store_true', 
                         help='No addition Linear layer and layernorm, only works if indexing size equals 768')
