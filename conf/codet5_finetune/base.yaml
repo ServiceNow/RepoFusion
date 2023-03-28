@@ -25,6 +25,7 @@ model_dir_base: /repo_data/finetuning_checkpoints
 # the split name must match between data and pivots
 training_split: train
 eval_split: validation
+eval_max_samples_count: 10000
 
 logging_strategy: steps
 logging_steps: 100
