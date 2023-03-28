@@ -30,8 +30,8 @@ import src.model
 def generate_and_calculate_em(model, tokenizer, dataset, idx, context_ids, context_mask, stopping_criteria):
     model = model.module if hasattr(model, "module") else model
     outputs = model.generate(input_ids=context_ids.cuda(),
-                            attention_mask=context_mask.cuda())
-                            # #max_length=10
+                            attention_mask=context_mask.cuda(),
+                            max_length=100)
                             # stopping_criteria=stopping_criteria)
     total = 0
     exactmatch = []
@@ -74,6 +74,8 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
         epoch += 1
         for i, batch in enumerate(train_dataloader):
             step += 1
+            # if step >= 235:
+            #     print("step", step)
             if step % 100 == 0:
                 logger.info(f"Step {step} / {opt.total_steps}")
 
@@ -81,7 +83,7 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
             # print("context_ids", context_ids.shape)
             # print("context_mask", context_mask.shape)
             # print("labels", labels.shape)
-            # print("idx", idx.shape)
+            # print("idx", idx)
 
             train_loss = model(
                 input_ids=context_ids.cuda(),
@@ -146,7 +148,7 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
 
             if opt.is_main and step % opt.save_freq == 0:
                 src.util.save(model, optimizer, scheduler, step, best_dev_em,
-                          opt, checkpoint_path, f"step-{step}")
+                        opt, checkpoint_path, f"step-{step}")
                 logger.info(f"Saving checkpoint to {checkpoint_path}")
 
             if step > opt.total_steps:
@@ -281,8 +283,10 @@ def run(opt):
                                     num_of_examples=opt.num_of_eval_examples_per_gpu)
     logger.info(f'Loaded {len(eval_dataset)} validation examples from {opt.eval_data}')
 
-    # Initialize the model and load from checkpoint if it exists.
-    if not checkpoint_exists and opt.model_path == "none":
+    load_path = checkpoint_path / 'checkpoint' / 'latest' 
+    # if checkpoint does not exist or if checkpoint exists but load path does not exist, train from scratch. The latter might happen when the 
+    # training got interrupted before the checkpoint could be stored.
+    if (not checkpoint_exists and opt.model_path == "none") or (checkpoint_exists and not load_path.exists()):
         logger.info(f'Training model from scratch')
         t5 = transformers.T5ForConditionalGeneration.from_pretrained(model_name)
         model = src.model.FiDT5(t5.config)
@@ -290,13 +294,15 @@ def run(opt):
         model = model.to(opt.local_rank)
         optimizer, scheduler = src.util.set_optim(opt, model)
         step, best_dev_em = 0, 0.0
+    # if checkpoint exists and load path exists, load the model from the checkpoint.
     elif opt.model_path == "none":
-        load_path = checkpoint_path / 'checkpoint' / 'latest'
+        load_path = checkpoint_path / 'checkpoint' / 'latest'    
         model, optimizer, scheduler, opt_checkpoint, step, best_dev_em = \
             src.util.load(model_class, load_path, opt, reset_params=False)
         logger.info(f"Model loaded from {load_path}")
         logger.info(f"Resuming training from step {step}")
         logger.info(f"Best dev EM: {best_dev_em:.2f}")
+    # if model path is specified, load the model from the model path (can be different from the usual checkpoint path).
     else:
         model, optimizer, scheduler, opt_checkpoint, step, best_dev_em = \
             src.util.load(model_class, opt.model_path, opt, reset_params=True)

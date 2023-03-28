@@ -95,7 +95,10 @@ class Dataset(torch.utils.data.Dataset):
                     tokens = self.tokenizer(context['text'])['input_ids']
                     parts = list(self.divide_chunks(tokens, rule_context_len))
                     for part in parts:
-                        modified_contexts.append({'title': context['title'], 'text': self.tokenizer.decode(part), 'score': context['score']})
+                        if len(part) > 0:
+                            modified_contexts.append({'title': context['title'], \
+                                                    'text': self.tokenizer.decode(part, skip_special_tokens=True), \
+                                                    'score': context['score']})
             return modified_contexts[:self.n_context]
 
         elif self.passage_mode == 'no-truncation-codex-last':
@@ -115,11 +118,16 @@ class Dataset(torch.utils.data.Dataset):
                         codex_parts = parts
                         continue                
                     for part in parts:
-                        modified_contexts.append({'title': context['title'], 'text': self.tokenizer.decode(part), 'score': context['score']})
+                        if len(part) > 0:
+                            modified_contexts.append({'title': context['title'], \
+                                                    'text': self.tokenizer.decode(part, skip_special_tokens=True), \
+                                                    'score': context['score']})
             
             contexts_before_codex = modified_contexts[:(self.n_context-len(codex_parts))]
             for part in codex_parts:
-                contexts_before_codex.append({'title': context['title'], 'text': self.tokenizer.decode(part), 'score': context['score']})
+                contexts_before_codex.append({'title': context['title'], \
+                                             'text': self.tokenizer.decode(part, skip_special_tokens=True), \
+                                            'score': context['score']})
             return contexts_before_codex
 
     def __getitem__(self, index):
@@ -131,15 +139,17 @@ class Dataset(torch.utils.data.Dataset):
         if 'ctxs' in example and self.n_context is not None:
             f = self.title_prefix + " {} " + self.passage_prefix + " {}"
             contexts = self.get_contexts(example['ctxs'], question)
-            passages = [f.format(c['title'], c['text']) for c in contexts]
-            scores = [float(c['score']) for c in contexts]
-            scores = torch.tensor(scores)
-            # TODO(egrave): do we want to keep this?
-            if len(contexts) == 0:
-                contexts = [question]
+            if len(contexts) > 0:
+                passages = [f.format(c['title'], c['text']) for c in contexts]
+                scores = [float(c['score']) for c in contexts]
+                scores = torch.tensor(scores)
+            else:
+                passages, scores = None, None
+                # TODO(egrave): do we want to keep this?
+                # if len(contexts) == 0:
+                #     contexts = [question]
         else:
             passages, scores = None, None
-
 
         return {
             'index' : index,
@@ -217,7 +227,6 @@ class Collator(object):
         passage_ids, passage_masks = encode_passages(text_passages,
                                                      self.tokenizer,
                                                      self.text_maxlength)
-
         return (index, target_ids, target_mask, passage_ids, passage_masks)
 
 # def load_data(data_path=None, global_rank=-1, world_size=-1):
@@ -317,3 +326,4 @@ class TextCollator(object):
         text_mask = encoded_batch['attention_mask'].bool()
 
         return index, text_ids, text_mask
+    
