@@ -92,8 +92,10 @@ def prepare_model_context(opt):
     opt.model_dir_base = Path(opt.model_dir_base)
     ctx.model_dir = opt.model_dir_base  / opt.trained_model_name / opt.experiment_name
 
+    # NOTE: move it to compute metric itself?
     examples_dir = ctx.model_dir / 'examples'
     examples_dir.mkdir(parents=True, exist_ok=True)
+    ctx.examples_dir = examples_dir
 
 
     # save steps must be multiple of eval steps and strategy must be the sasme and not no
