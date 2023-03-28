@@ -7,7 +7,6 @@ from transformers import StoppingCriteria
 
 def set_global_seeds(opt):
     # TODO: add per rank seed mofification
-    #       and add rank setting in options
     np.random.seed(opt.seed)
     os.environ['PYTHONHASHSEED'] = str(opt.seed)
     random.seed(opt.seed)
@@ -26,6 +25,7 @@ class StoppingCriteriaTokenIds(StoppingCriteria):
         )).item()
     
 def set_distributed_options(opt):
+    # adapted from FiD distributed options setting
     # multi gpu options
     if 'LOCAL_RANK' in os.environ:
         opt.local_rank = int(os.environ['LOCAL_RANK'])
