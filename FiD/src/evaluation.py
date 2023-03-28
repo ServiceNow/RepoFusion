@@ -152,8 +152,8 @@ def get_batch_exactmatch(outputs, tokenizer, dataset, idx, total=0, exactmatch=[
         ans = tokenizer.decode(o, skip_special_tokens=True)
         gold = dataset.get_example(idx[k])['target']
         score = em_code(ans, gold)
-        print(k, o)
-        print("ans:{ans}, gold:{gold}, score:{score}".format(ans=ans, gold=gold, score=score))
+        # print(k, o)
+        # print("ans:{ans}, gold:{gold}, score:{score}".format(ans=ans, gold=gold, score=score))
         total += 1
         exactmatch.append(score)
     return exactmatch, total, (ans, gold)

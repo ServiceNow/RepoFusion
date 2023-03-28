@@ -252,9 +252,8 @@ def run(opt):
     
     # Set the tokenizer and initialize the collator.
     tokenizer = transformers.RobertaTokenizer.from_pretrained(model_name)
-    stop_words = ["\n"]
-    stop_words_ids = [tokenizer(stop_word, return_tensors='pt')['input_ids'].squeeze() for stop_word in stop_words]
-    stopping_criteria = StoppingCriteriaList([src.util.StoppingCriteriaSub(stops=stop_words_ids)])
+
+    stopping_criteria = StoppingCriteriaList([src.util.StoppingCriteriaTokenIds(stop_ids=[2, 203, 206], device=opt.device)])
 
     collator = src.data.Collator(text_maxlength=opt.text_maxlength, \
                                     tokenizer=tokenizer, \

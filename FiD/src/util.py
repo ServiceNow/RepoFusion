@@ -17,18 +17,18 @@ from transformers import StoppingCriteria
 
 logger = logging.getLogger(__name__)
 
-class StoppingCriteriaSub(StoppingCriteria):
-
-    def __init__(self, stops = [], encounters=1):
+class StoppingCriteriaTokenIds(StoppingCriteria):
+    def __init__(self, stop_ids, device='cuda'):
         super().__init__()
-        self.stops = [stop.to("cuda") for stop in stops]
+        self.stop_ids = torch.tensor(stop_ids).to(device)
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor):
-        for stop in self.stops:
-            if torch.all((stop == input_ids[0][-len(stop):])).item():
-                return True
-
-        return False
+    def __call__(self, input_ids, scores, *kwargs):
+        # true if any alement is one of the stop ids in all rows
+        return torch.all(torch.any(
+            torch.isin(input_ids, self.stop_ids),
+            dim=1,
+            keepdim=False
+        )).item()
 
 def init_logger(is_main=True, is_distributed=False, filename=None):
     if is_distributed:

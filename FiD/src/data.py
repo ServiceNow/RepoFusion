@@ -74,8 +74,9 @@ class Dataset(torch.utils.data.Dataset):
         # the model can learn to complete the hole starting from the default codex context.
         elif self.passage_mode == 'truncation-codex-last':
             codex_context = contexts.pop(16) # 16 is the index of the default codex context.
-            contexts.append(codex_context)
-            return contexts[:self.n_context]
+            contexts_without_codex = contexts[:(self.n_context-1)]
+            contexts_without_codex.append(codex_context)
+            return contexts_without_codex
 
         # randomly shuffle the contexts. rule order is distorted here.
         elif self.passage_mode == 'truncation-random':
@@ -108,15 +109,15 @@ class Dataset(torch.utils.data.Dataset):
             else:
                 rule_context_len = self.text_maxlen           
             modified_contexts = []
-            count = 0
+
+            codex_context = contexts.pop(16) # 16 is the index of the default codex context.
+            codex_tokens = self.tokenizer(context['text'])['input_ids']
+            codex_parts = list(self.divide_chunks(codex_tokens, rule_context_len))
+
             for context in contexts:
-                count += 1
                 if context['text']:
                     tokens = self.tokenizer(context['text'])['input_ids']
-                    parts = list(self.divide_chunks(tokens, rule_context_len))
-                    if count == 17: # 16 + 1 as count is incremented before the if condition.
-                        codex_parts = parts
-                        continue                
+                    parts = list(self.divide_chunks(tokens, rule_context_len))              
                     for part in parts:
                         if len(part) > 0:
                             modified_contexts.append({'title': context['title'], \
@@ -125,9 +126,10 @@ class Dataset(torch.utils.data.Dataset):
             
             contexts_before_codex = modified_contexts[:(self.n_context-len(codex_parts))]
             for part in codex_parts:
-                contexts_before_codex.append({'title': context['title'], \
-                                             'text': self.tokenizer.decode(part, skip_special_tokens=True), \
-                                            'score': context['score']})
+                if len(part) > 0:
+                    contexts_before_codex.append({'title': context['title'], \
+                                                'text': self.tokenizer.decode(part, skip_special_tokens=True), \
+                                                'score': context['score']})
             return contexts_before_codex
 
     def __getitem__(self, index):
