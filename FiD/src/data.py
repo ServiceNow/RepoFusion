@@ -10,39 +10,86 @@ import random
 import json
 import numpy as np
 
-class Dataset(torch.utils.data.Dataset):
-    def __init__(self,
-                 data_path,
-                 n_context=None,
-                 global_rank=-1,
-                 world_size=-1,
-                 question_prefix='hole_context:',
-                 title_prefix='rule_name:',
-                 passage_prefix='rule_context:',
-                 passage_mode='truncation-direct',
-                 text_maxlen=512,
-                 tokenizer=None, 
-                 is_append_question=True, 
-                 num_of_examples=-1):
-        assert data_path
-        examples = []
-        # each example is a json object that consists of data for a single hole. We load the json object later for efficiency.
-        for dp, dn, filenames in os.walk(data_path):
-            for f in filenames:
-                if f == 'hole_and_rule_contexts.json':
-                    data_path = os.path.join(dp, f)
-                    #print('Loading data from {}'.format(data_path))
-                    lines = open(data_path, 'r').readlines()
-                    for i, line in enumerate(lines):
-                        # distribute the data across the ranks (GPUs).
-                        if global_rank > -1 and not i % world_size == global_rank:
-                            continue
-                        examples.append(line.strip())
-                    #data_path.close()
+import datasets
+from datasets.distributed import split_dataset_by_node
+from pathlib import Path
 
-        # if num_of_examples is specified, we only load the first num_of_examples examples.
-        if num_of_examples > 0:
-            examples = examples[:num_of_examples]
+class Dataset(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        data_path,
+        features_format_file=None,
+        data_file_pattern=None,
+        split=None,
+        hf_datasets_cache_dir=None,
+        hf_datasets_load_num_proc=None,
+        n_context=None,
+        global_rank=-1,
+        world_size=-1,
+        question_prefix='hole_context:',
+        title_prefix='rule_name:',
+        passage_prefix='rule_context:',
+        passage_mode='truncation-direct',
+        text_maxlen=512,
+        tokenizer=None, 
+        is_append_question=True, 
+        num_of_examples=-1,
+    ):
+        assert data_path
+        if features_format_file is not None:
+            data_path = Path(data_path)
+            features_format_file = data_path / features_format_file
+            ftrs = datasets.Features.from_dict(json.loads(Path(
+                features_format_file
+            ).read_text()))
+            ds = datasets.load_dataset(
+                str(data_path),
+                data_files={split: split+'/'+data_file_pattern},
+                split=split,
+                features=ftrs,
+                num_proc=hf_datasets_load_num_proc,
+                cache_dir=hf_datasets_cache_dir
+            )
+            # NOTE: Is this is the bahaviour we want or  better assert for consistency
+            #       between distributed params
+            if global_rank == -1 or world_size == -1:
+                global_rank = 0
+                world_size = 1
+            if world_size > 1:
+                self.ds = split_dataset_by_node(ds[split], global_rank, world_size)
+            else:
+                self.ds = ds[split]
+            
+            # if num_of_examples is specified, we only load the first num_of_examples examples.
+            if num_of_examples > 0:
+                self.ds = self.ds.select(range(num_of_examples))
+            print(
+                'Loaded {} examples with global rank {} and world size {}'.format(
+                    len(self.ds), global_rank, world_size
+            ))
+            self.examples = None
+        else:
+            examples = []
+            # each example is a json object that consists of data for a single hole. We load the json object later for efficiency.
+            for dp, dn, filenames in os.walk(data_path):
+                for f in filenames:
+                    if f == 'hole_and_rule_contexts.json':
+                        data_path = os.path.join(dp, f)
+                        #print('Loading data from {}'.format(data_path))
+                        lines = open(data_path, 'r').readlines()
+                        for i, line in enumerate(lines):
+                            # distribute the data across the ranks (GPUs).
+                            if global_rank > -1 and not i % world_size == global_rank:
+                                continue
+                            examples.append(line.strip())
+                        #data_path.close()
+
+            # if num_of_examples is specified, we only load the first num_of_examples examples.
+            if num_of_examples > 0:
+                examples = examples[:num_of_examples]
+            print('Loaded {} examples with global rank {} and world size {}'.format(len(examples), global_rank, world_size))
+            self.examples = examples
+            self.ds = None
         print('Loaded {} examples with global rank {} and world size {}'.format(len(examples), global_rank, world_size))
         self.examples = examples
         self.n_context = n_context
@@ -56,7 +103,9 @@ class Dataset(torch.utils.data.Dataset):
         self.is_append_question = is_append_question
 
     def __len__(self):
-        return len(self.examples)
+        if self.ds is None:
+             return len(self.examples)
+        return len(self.ds)
 
     def divide_chunks(self, l, n):   
         # looping till length l
@@ -133,8 +182,11 @@ class Dataset(torch.utils.data.Dataset):
             return contexts_before_codex
 
     def __getitem__(self, index):
-        example = self.examples[index]
-        example = json.loads(example)
+        if self.ds is None:
+            example = self.examples[index]
+            example = json.loads(example)
+        else:
+            example = self.ds[index]
         question = self.question_prefix + " " + example['question']
         target = example['target']
 
@@ -168,9 +220,11 @@ class Dataset(torch.utils.data.Dataset):
     #         ex['ctxs'].sort(key=lambda x: float(x['score']), reverse=True)
 
     def get_example(self, index):
-        example = self.examples[index]
-        example = json.loads(example)
-        return example
+        if self.ds is None:
+            example = self.examples[index]
+            example = json.loads(example)
+            return example
+        return  self.ds[index]
 
 def encode_passages(batch_text_passages, tokenizer, max_length):
     passage_ids, passage_masks = [], []

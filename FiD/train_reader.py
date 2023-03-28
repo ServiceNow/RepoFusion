@@ -261,26 +261,69 @@ def run(opt):
                                     is_append_question=opt.is_append_question)
 
     # Load the training and validation data. The data is split across multiple GPUs.
-    train_dataset = src.data.Dataset(data_path=opt.train_data, \
-                                    global_rank=opt.global_rank, \
-                                    world_size=opt.world_size,\
-                                    n_context = opt.n_context, \
-                                    tokenizer=tokenizer, \
-                                    passage_mode=opt.passage_mode, \
-                                    is_append_question=opt.is_append_question, \
-                                    text_maxlen=opt.text_maxlength)
-    logger.info(f'Loaded {len(train_dataset)} training examples from {opt.train_data}')
 
-    eval_dataset = src.data.Dataset(data_path=opt.eval_data, \
-                                    global_rank=opt.global_rank, \
-                                    world_size=opt.world_size,\
-                                    n_context = opt.n_context, \
-                                    tokenizer=tokenizer, \
-                                    passage_mode=opt.passage_mode, \
-                                    is_append_question=opt.is_append_question, \
-                                    text_maxlen=opt.text_maxlength, \
-                                    num_of_examples=opt.num_of_eval_examples_per_gpu)
-    logger.info(f'Loaded {len(eval_dataset)} validation examples from {opt.eval_data}')
+    # NOTE: either specify train_data and eval_data to load with custom implementation or 
+    #       dataset_path to load with hugging face functionality, but not both
+    assert (opt.train_data is not None and opt.eval_data is not None) or opt.dataset_path is not None
+
+
+    if opt.dataset_path is None:
+        train_dataset = src.data.Dataset(data_path=opt.train_data, \
+                                        global_rank=opt.global_rank, \
+                                        world_size=opt.world_size,\
+                                        n_context = opt.n_context, \
+                                        tokenizer=tokenizer, \
+                                        passage_mode=opt.passage_mode, \
+                                        is_append_question=opt.is_append_question, \
+                                        text_maxlen=opt.text_maxlength)
+        logger.info(f'Loaded {len(train_dataset)} training examples from {opt.train_data}')
+
+        eval_dataset = src.data.Dataset(data_path=opt.eval_data, \
+                                        global_rank=opt.global_rank, \
+                                        world_size=opt.world_size,\
+                                        n_context = opt.n_context, \
+                                        tokenizer=tokenizer, \
+                                        passage_mode=opt.passage_mode, \
+                                        is_append_question=opt.is_append_question, \
+                                        text_maxlen=opt.text_maxlength, \
+                                        num_of_examples=opt.num_of_eval_examples_per_gpu)
+        logger.info(f'Loaded {len(eval_dataset)} validation examples from {opt.eval_data}')
+    else:
+        train_dataset = src.data.Dataset(
+            data_path=opt.dataset_path,
+            features_format_file=opt.features_format_file,
+            data_file_pattern=opt.data_file_pattern,
+            split=opt.train_split_name,
+            hf_datasets_cache_dir=opt.hf_datasets_cache_dir,
+            hf_datasets_load_num_proc=opt.hf_datasets_load_num_proc,
+            global_rank=opt.global_rank,
+            world_size=opt.world_size,
+            n_context = opt.n_context,
+            tokenizer=tokenizer,
+            passage_mode=opt.passage_mode,
+            is_append_question=opt.is_append_question,
+            text_maxlen=opt.text_maxlength
+        )
+        logger.info(f'Loaded {len(train_dataset)} training examples from {opt.dataset_path}:{opt.train_split_name}')
+
+        eval_dataset = src.data.Dataset(
+            data_path=opt.dataset_path,
+            features_format_file=opt.features_format_file,
+            data_file_pattern=opt.data_file_pattern,
+            split=opt.eval_split_name,
+            hf_datasets_cache_dir=opt.hf_datasets_cache_dir,
+            hf_datasets_load_num_proc=opt.hf_datasets_load_num_proc,
+            global_rank=opt.global_rank,
+            world_size=opt.world_size,
+            n_context = opt.n_context,
+            tokenizer=tokenizer,
+            passage_mode=opt.passage_mode,
+            is_append_question=opt.is_append_question,
+            text_maxlen=opt.text_maxlength,
+            num_of_examples=opt.num_of_eval_examples_per_gpu
+        )
+        logger.info(f'Loaded {len(eval_dataset)} validation examples from {opt.dataset_path}:{opt.eval_split_name}')
+
 
     load_path = checkpoint_path / 'checkpoint' / 'latest' 
     # if checkpoint does not exist or if checkpoint exists but load path does not exist, train from scratch. The latter might happen when the 
