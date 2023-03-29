@@ -19,6 +19,7 @@ num_proc: 8
 seed: 42
 
 # Model params
+eval_not_trained: True
 base_model_name: Salesforce/codet5-base
 trained_model_name: codet5-base-ntp-java
 model_dir_base: /repo_data/finetuning_checkpoints

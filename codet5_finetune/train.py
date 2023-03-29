@@ -8,7 +8,7 @@ def run(ctx):
         dir.startswith("checkpoint") for dir in os.listdir(ctx.model_dir)
     )
     # Evaluate not trained model
-    if not has_checkpoints:
+    if not has_checkpoints and ctx.opt.eval_not_trained:
         ctx.trainer.evaluate()
     ctx.trainer.train(
         resume_from_checkpoint=has_checkpoints
