@@ -7,7 +7,6 @@
 
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
-#os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:1024"
 
 import time
 import sys
@@ -32,7 +31,7 @@ def generate_and_calculate_em(model, tokenizer, dataset, idx, context_ids, conte
     outputs = model.generate(input_ids=context_ids.cuda(),
                             attention_mask=context_mask.cuda(),
                             max_length=100)
-                            # stopping_criteria=stopping_criteria)
+                            #stopping_criteria=stopping_criteria)
     total = 0
     exactmatch = []
     for k, o in enumerate(outputs):

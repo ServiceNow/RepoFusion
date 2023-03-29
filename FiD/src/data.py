@@ -160,8 +160,11 @@ class Dataset(torch.utils.data.Dataset):
             modified_contexts = []
 
             codex_context = contexts.pop(16) # 16 is the index of the default codex context.
-            codex_tokens = self.tokenizer(context['text'])['input_ids']
-            codex_parts = list(self.divide_chunks(codex_tokens, rule_context_len))
+            if codex_context['text']:
+                codex_tokens = self.tokenizer(codex_context['text'])['input_ids']
+                codex_parts = list(self.divide_chunks(codex_tokens, rule_context_len))
+            else:
+                codex_parts = []
 
             for context in contexts:
                 if context['text']:
