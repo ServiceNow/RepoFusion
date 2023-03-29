@@ -36,8 +36,8 @@ def compute_metrics(preds, ctx):
 
         # TODO: seems trainer pads all seq with -100 then aggregates different batches for compute_metrics
         #       or in some other place, check this and find if this can be changes instead of replacing here
-        predictions = np.where(preds.label_ids != -100, preds.predictions, ctx.tokenizer.pad_token_id)
-        inputs = np.where(preds.label_ids != -100, preds.inputss, ctx.tokenizer.pad_token_id)
+        predictions = np.where(preds.predictions != -100, preds.predictions, ctx.tokenizer.pad_token_id)
+        inputs = np.where(preds.inputs != -100, preds.inputs, ctx.tokenizer.pad_token_id)
 
         predictions = ctx.tokenizer.batch_decode(predictions, skip_special_tokens=True)
         inputs = ctx.tokenizer.batch_decode(inputs)
