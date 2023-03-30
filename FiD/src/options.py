@@ -36,33 +36,12 @@ class Options():
                         help='save dataset with cross-attention scores')
 
     def add_reader_options(self):
-        self.parser.add_argument('--model_name', type=str, default='Salesforce/codet5', help='model name without size')
-        self.parser.add_argument('--model_max_length', type=int, default=512, help='model_max_length for tokenizer')
+        # NOTE: either specify train_data and eval_data to load with custom implementation or 
+        # dataset_path to load with hugging face functionality, but not both
         self.parser.add_argument('--train_data', type=str, default='/repo_data/repo_preprocessed_data/small_train/', help='path of train data')
         self.parser.add_argument('--eval_data', type=str, default='/repo_data/repo_preprocessed_data/small_val/', help='path of eval data')
-        self.parser.add_argument('--model_size', type=str, default='base')
-        self.parser.add_argument('--use_checkpoint', action='store_true', help='use checkpoint in the encoder')
-        self.parser.add_argument('--text_maxlength', type=int, default=512,  
-                        help='maximum number of tokens in text segments (question+passage)')
-        self.parser.add_argument('--answer_maxlength', type=int, default=512, 
-                        help='maximum number of tokens used to train the model, no truncation if -1')
-        self.parser.add_argument('--no_title', action='store_true', 
-                        help='article titles not included in passages')
-        self.parser.add_argument('--n_context', type=int, default=63)
-        self.parser.add_argument('--is_append_question', action='store_false', help='whether to append question to passage')
-        self.parser.add_argument('--passage_mode', type=str, default = 'truncation-direct', \
-                                    help = 'different modes of treating the passages. Options are truncation-direct, no-truncation-direct, \
-                                    truncation-random, no-truncation-codex-last, truncation-codex-last')
-        self.parser.add_argument('--num_of_eval_examples_per_gpu', type=int, default=5000,  
-                        help='maximum number of examples to take from the eval dataset')
-
-    def add_retriever_options(self):
-        # NOTE: either specify train_data and eval_data to load with custom implementation or 
-        #       dataset_path to load with hugging face functionality, but not both
-        self.parser.add_argument('--train_data', type=str, default='none', help='path of train data')
-        self.parser.add_argument('--eval_data', type=str, default='none', help='path of eval data')
         self.parser.add_argument(
-            '--dataset_path', type=str, default='none',
+            '--dataset_path', type=str, default=None,
             help='path to a dataset to be loaded with hugging face funcionality'
         )
         self.parser.add_argument(
@@ -92,6 +71,28 @@ class Options():
             type=str, default='/repo_data/hf_datasets_cashe',
             help='forder path to use as datasets chache, None will result in default'
         )
+
+        self.parser.add_argument('--model_name', type=str, default='Salesforce/codet5', help='model name without size')
+        self.parser.add_argument('--model_max_length', type=int, default=512, help='model_max_length for tokenizer')
+        self.parser.add_argument('--model_size', type=str, default='base')
+        self.parser.add_argument('--use_checkpoint', action='store_true', help='use checkpoint in the encoder')
+        self.parser.add_argument('--text_maxlength', type=int, default=512,  
+                        help='maximum number of tokens in text segments (question+passage)')
+        self.parser.add_argument('--answer_maxlength', type=int, default=512, 
+                        help='maximum number of tokens used to train the model, no truncation if -1')
+        self.parser.add_argument('--no_title', action='store_true', 
+                        help='article titles not included in passages')
+        self.parser.add_argument('--n_context', type=int, default=63)
+        self.parser.add_argument('--is_append_question', action='store_false', help='whether to append question to passage')
+        self.parser.add_argument('--passage_mode', type=str, default = 'truncation-direct', \
+                                    help = 'different modes of treating the passages. Options are truncation-direct, no-truncation-direct, \
+                                    truncation-random, no-truncation-codex-last, truncation-codex-last')
+        self.parser.add_argument('--num_of_eval_examples_per_gpu', type=int, default=5000,  
+                        help='maximum number of examples to take from the eval dataset')
+
+    def add_retriever_options(self):
+        self.parser.add_argument('--train_data', type=str, default='none', help='path of train data')
+        self.parser.add_argument('--eval_data', type=str, default='none', help='path of eval data')
         self.parser.add_argument('--indexing_dimension', type=int, default=768)
         self.parser.add_argument('--no_projection', action='store_true', 
                         help='No addition Linear layer and layernorm, only works if indexing size equals 768')
@@ -127,9 +128,9 @@ class Options():
         # training parameters
         self.parser.add_argument('--eval_loss_freq', type=int, default=2000,
                         help='evaluate model loss every <eval_freq> steps during training')
-        self.parser.add_argument('--save_freq', type=int, default=5000,
+        self.parser.add_argument('--save_freq', type=int, default=2000,
                         help='save model every <save_freq> steps during training')
-        self.parser.add_argument('--eval_em_freq', type=int, default=10000,
+        self.parser.add_argument('--eval_em_freq', type=int, default=5000,
                         help='evaluate model EM every <eval_em_freq> steps')
 
 
