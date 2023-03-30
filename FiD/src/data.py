@@ -56,9 +56,8 @@ class Dataset(torch.utils.data.Dataset):
                 global_rank = 0
                 world_size = 1
             if world_size > 1:
-                self.ds = split_dataset_by_node(ds[split], global_rank, world_size)
-            else:
-                self.ds = ds[split]
+                ds = split_dataset_by_node(ds, global_rank, world_size)
+            self.ds = ds
             
             # if num_of_examples is specified, we only load the first num_of_examples examples.
             if num_of_examples > 0:
