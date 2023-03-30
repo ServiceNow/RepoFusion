@@ -37,5 +37,10 @@ def options(args=None):
             data.update(yaml.safe_load(f))
         data['experiment_name'] = experiment_config.stem
     
+    def opt_repr(self):
+        return f'Opt() at {id(self):x}:\n'+''.join(
+            f'  {el}: {getattr(self, el)}\n' for el in dir(self) if not el.startswith('__')
+        )
+    data['__repr__'] = opt_repr
     opt = type('Opt', (), data)()
     return opt
