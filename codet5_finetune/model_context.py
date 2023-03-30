@@ -40,7 +40,7 @@ class Trainer42(Seq2SeqTrainer):
     ) -> Dict[str, float]:
         if self.stopping_criteria_list is not None:
             gen_kwargs['stopping_criteria'] = self.stopping_criteria_list
-        super().evaluate(
+        return super().evaluate(
             eval_dataset,
             ignore_keys=ignore_keys,
             metric_key_prefix=metric_key_prefix,
