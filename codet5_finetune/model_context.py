@@ -69,6 +69,10 @@ def prepare_model_context(opt):
         ctx.ds_pivots = get_debug_pivot_sets(ctx.ds_pivots, opt)
         assert_debug_data(ctx, opt)
     else:
+        if opt.training_max_samples_count != -1:
+            ctx.ds_pivots[opt.training_split] = ctx.ds_pivots[opt.training_split].shuffle(
+                seed=opt.seed
+            ).select(range(opt.training_max_samples_count))
         if opt.eval_max_samples_count != -1:
             ctx.ds_pivots[opt.eval_split] = ctx.ds_pivots[opt.eval_split].shuffle(
                 seed=opt.seed

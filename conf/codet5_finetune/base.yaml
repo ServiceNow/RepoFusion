@@ -25,6 +25,7 @@ trained_model_name: codet5-base-ntp-java
 model_dir_base: /repo_data/finetuning_checkpoints
 # the split name must match between data and pivots
 training_split: train
+training_max_samples_count: -1
 eval_split: validation
 eval_max_samples_count: 10000
 
