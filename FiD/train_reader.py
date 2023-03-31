@@ -30,8 +30,8 @@ def generate_and_calculate_em(model, tokenizer, dataset, idx, context_ids, conte
     model = model.module if hasattr(model, "module") else model
     outputs = model.generate(input_ids=context_ids.cuda(),
                             attention_mask=context_mask.cuda(),
-                            max_length=100)
-                            #stopping_criteria=stopping_criteria)
+                            max_length=100,
+                            stopping_criteria=stopping_criteria)
     total = 0
     exactmatch = []
     for k, o in enumerate(outputs):
@@ -237,8 +237,12 @@ def run(opt):
     logger.info(f"Model: {model_name}")
     logger.info(f"Checkpoint Path: {checkpoint_path}")
 
-    # Get max model lenght
-    model_cfg = transformers.AutoConfig.from_pretrained(model_name)
+    # Set the model.
+    if opt.initialize_from_pretrained:
+        model_cfg = transformers.AutoConfig.from_pretrained(model_name)
+    else:
+        model_cfg = transformers.AutoConfig.from_pretrained(opt.finetuned_model_path)
+        
     if not (hasattr(model_cfg, 'n_positions') and hasattr(model_cfg, 'output_past')):
         raise ValueError(f'Model {model_name} config has no n_positions and output_past')
 

@@ -41,7 +41,7 @@ class Options():
         self.parser.add_argument('--train_data', type=str, default='/repo_data/repo_preprocessed_data/small_train/', help='path of train data')
         self.parser.add_argument('--eval_data', type=str, default='/repo_data/repo_preprocessed_data/small_val/', help='path of eval data')
         self.parser.add_argument(
-            '--dataset_path', type=str, default=None,
+            '--dataset_path', type=str, default=None, #'/repo_data/repo_preprocessed_data/
             help='path to a dataset to be loaded with hugging face funcionality'
         )
         self.parser.add_argument(
@@ -112,8 +112,14 @@ class Options():
         self.parser.add('-c', '--config', required=False, is_config_file=True, help='config file path')
         # basic parameters
         self.parser.add_argument('--name', type=str, default='debug', help='name of the experiment')
+        self.parser.add_argument('--initialize_from_pretrained', action='store_false', #default value is True
+                        help='whether to initialize from a pretrained model or not. When this is False,\
+                        the model is initialized from the finetuned_model_path')
         self.parser.add_argument('--checkpoint_dir', type=str, default='/repo_data/repo_FID/checkpoints/', help='models are saved here')
         self.parser.add_argument('--model_path', type=str, default='none', help='path for retraining')
+        self.parser.add_argument('--finetuned_model_path', type=str, \
+                                    default='/repo_data/finetuning_checkpoints/code-t5-base-finetuned', \
+                                        help='path of the finetuned model')
 
         # dataset parameters
         self.parser.add_argument("--per_gpu_batch_size", default=1, type=int, 

@@ -89,8 +89,6 @@ class Dataset(torch.utils.data.Dataset):
             print('Loaded {} examples with global rank {} and world size {}'.format(len(examples), global_rank, world_size))
             self.examples = examples
             self.ds = None
-        print('Loaded {} examples with global rank {} and world size {}'.format(len(examples), global_rank, world_size))
-        self.examples = examples
         self.n_context = n_context
         self.question_prefix = question_prefix
         self.title_prefix = title_prefix
