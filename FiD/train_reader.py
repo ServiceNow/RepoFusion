@@ -36,7 +36,7 @@ def generate_and_calculate_em(model, tokenizer, dataset, idx, context_ids, conte
     exactmatch = []
     for k, o in enumerate(outputs):
         ans = tokenizer.decode(o, skip_special_tokens=True)
-        gold = dataset.get_example(idx[k])['target']
+        gold = dataset.get_example(idx[k].item())['target']
         score = src.evaluation.em_code(ans, gold)
         #print('ans:{}, gold:{}, score:{}'.format(ans, gold, score))
         total += 1
