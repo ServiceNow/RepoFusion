@@ -18,7 +18,7 @@ class Options():
 
     def add_optim_options(self):
         self.parser.add_argument('--warmup_steps', type=int, default=1000) 
-        self.parser.add_argument('--total_steps', type=int, default=200000) 
+        self.parser.add_argument('--total_steps', type=int, default=500000) 
         self.parser.add_argument('--scheduler_steps', type=int, default=None, 
                         help='total number of step for the scheduler, if None then scheduler_total_step = total_step')
         self.parser.add_argument('--accumulation_steps', type=int, default=1)
@@ -31,9 +31,17 @@ class Options():
         self.parser.add_argument('--fixed_lr', action='store_true')
 
     def add_eval_options(self):
-        self.parser.add_argument('--write_results', action='store_true', help='save results')
+        self.parser.add_argument('--write_results', action='store_false', help='save results, default is True')
         self.parser.add_argument('--write_crossattention_scores', action='store_true', 
-                        help='save dataset with cross-attention scores')
+                        help='save dataset with cross-attention scores, default is False')
+        self.parser.add_argument('--trained_model_path', type=str, \
+                            default=None, help='path of the model to be evaluated') #/repo_data/repo_preprocessed_data/checkpoints/512_63_truncation-direct_True
+        self.parser.add_argument('--trained_model_load_type', type=str, default='best_dev', help='best_dev or latest')
+        self.parser.add_argument('--output_dir', type=str, \
+                            default='/repo_data/repo_FID/evaluation', \
+                                help='path of the output directory')
+        self.parser.add_argument('--eval_print_freq', type=int, default=10, help='print frequency')
+
 
     def add_reader_options(self):
         # NOTE: either specify train_data and eval_data to load with custom implementation or 
@@ -45,11 +53,11 @@ class Options():
             help='path to a dataset to be loaded with hugging face funcionality'
         )
         self.parser.add_argument(
-            '--train_split_name', type=str, default='train',
+            '--train_split_name', type=str, default='medium_train',
             help='training split name to be loaded with hugging face funcionality'
         )
         self.parser.add_argument(
-            '--eval_split_name', type=str, default='val',
+            '--eval_split_name', type=str, default='medium_val',
             help='eval split name to be loaded with hugging face funcionality'
         )
         self.parser.add_argument(
@@ -132,7 +140,7 @@ class Options():
                         help="Main port (for multi-node SLURM jobs)")
         self.parser.add_argument('--seed', type=int, default=0, help="random seed for initialization")
         # training parameters
-        self.parser.add_argument('--eval_loss_freq', type=int, default=2000,
+        self.parser.add_argument('--eval_loss_freq', type=int, default=5000,
                         help='evaluate model loss every <eval_freq> steps during training')
         self.parser.add_argument('--save_freq', type=int, default=2000,
                         help='save model every <save_freq> steps during training')

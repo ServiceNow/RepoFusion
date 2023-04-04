@@ -185,18 +185,32 @@ def weighted_average(x, count, opt):
     return (t_loss / t_total).item(), t_total.item()
 
 
+# def write_output(glob_path, output_path):
+#     files = list(glob_path.glob('*.txt'))
+#     files.sort()
+#     with open(output_path, 'w') as outfile:
+#         for path in files:
+#             with open(path, 'r') as f:
+#                 lines = f.readlines()
+#                 for line in lines:
+#                     outfile.write(line)
+#             path.unlink()
+#     glob_path.rmdir()
+
 def write_output(glob_path, output_path):
-    files = list(glob_path.glob('*.txt'))
+    files = list(glob_path.glob('*.jsonl'))
     files.sort()
-    with open(output_path, 'w') as outfile:
-        for path in files:
-            with open(path, 'r') as f:
-                lines = f.readlines()
-                for line in lines:
-                    outfile.write(line)
-            path.unlink()
+    data = []
+    for path in files:
+        with open(path, 'r') as f:
+            lines = f.readlines()
+            for line in lines:
+                data.append(json.loads(line))
+        path.unlink()
     glob_path.rmdir()
 
+    with open(output_path, 'w') as outfile:
+        json.dump(data, outfile, indent=4)
 
 def save_distributed_dataset(data, opt):
     dir_path = Path(opt.checkpoint_dir) / opt.name

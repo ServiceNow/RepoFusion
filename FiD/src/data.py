@@ -99,6 +99,13 @@ class Dataset(torch.utils.data.Dataset):
         self.tokenizer = tokenizer
         self.is_append_question = is_append_question
 
+        if self.passage_mode == 'baseline':
+            self.n_context = 1
+            self.is_append_question = False
+            self.title_prefix = ''
+            self.passage_prefix = ''
+            self.question_prefix = ''
+
     def __len__(self):
         if self.ds is None:
              return len(self.examples)
@@ -111,6 +118,9 @@ class Dataset(torch.utils.data.Dataset):
 
     def get_contexts(self, contexts, question=None):
         # the passages are already stored in sorted rule order.
+
+        if self.passage_mode == 'baseline':
+            return [contexts[16]]
 
         if self.passage_mode == 'truncation-direct':
             return contexts[:self.n_context]
@@ -194,7 +204,10 @@ class Dataset(torch.utils.data.Dataset):
             f = self.title_prefix + " {} " + self.passage_prefix + " {}"
             contexts = self.get_contexts(example['ctxs'], question)
             if len(contexts) > 0:
-                passages = [f.format(c['title'], c['text']) for c in contexts]
+                if self.passage_mode == 'baseline':
+                    passages = [c['text'] for c in contexts]
+                else:   
+                    passages = [f.format(c['title'], c['text']) for c in contexts]
                 scores = [float(c['score']) for c in contexts]
                 scores = torch.tensor(scores)
             else:
@@ -204,6 +217,12 @@ class Dataset(torch.utils.data.Dataset):
                 #     contexts = [question]
         else:
             passages, scores = None, None
+
+        # print("index: ", index)
+        # print("question: ", question)
+        # print("target: ", target)
+        # print("passages: ", passages)
+        # print("scores: ", scores)
 
         return {
             'index' : index,
@@ -280,6 +299,7 @@ class Collator(object):
             return appended_passages
         
         text_passages = [append_question(example) for example in batch]
+        #print(text_passages)
         passage_ids, passage_masks = encode_passages(text_passages,
                                                      self.tokenizer,
                                                      self.text_maxlength)
