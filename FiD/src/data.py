@@ -99,7 +99,7 @@ class Dataset(torch.utils.data.Dataset):
         self.tokenizer = tokenizer
         self.is_append_question = is_append_question
 
-        if self.passage_mode == 'baseline':
+        if self.passage_mode == 'pretrained' or self.passage_mode == 'finetuned':
             self.n_context = 1
             self.is_append_question = False
             self.title_prefix = ''
@@ -119,7 +119,7 @@ class Dataset(torch.utils.data.Dataset):
     def get_contexts(self, contexts, question=None):
         # the passages are already stored in sorted rule order.
 
-        if self.passage_mode == 'baseline':
+        if self.passage_mode == 'pretrained' or self.passage_mode == 'finetuned':
             return [contexts[16]]
 
         if self.passage_mode == 'truncation-direct':
@@ -204,8 +204,10 @@ class Dataset(torch.utils.data.Dataset):
             f = self.title_prefix + " {} " + self.passage_prefix + " {}"
             contexts = self.get_contexts(example['ctxs'], question)
             if len(contexts) > 0:
-                if self.passage_mode == 'baseline':
+                if self.passage_mode == 'finetuned':
                     passages = [c['text'] for c in contexts]
+                elif self.passage_mode == 'pretrained':
+                    passages = [c['text'] + '<extra_id_0>' for c in contexts]
                 else:   
                     passages = [f.format(c['title'], c['text']) for c in contexts]
                 scores = [float(c['score']) for c in contexts]
