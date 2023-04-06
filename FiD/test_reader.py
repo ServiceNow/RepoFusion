@@ -12,7 +12,7 @@ from pathlib import Path
 import torch.distributed as dist
 import multiprocessing
 from torch.utils.data import DataLoader, SequentialSampler
-from transformers import StoppingCriteriaList
+from transformers import StoppingCriteriaList, T5ForConditionalGeneration
 
 
 import src.slurm
@@ -122,7 +122,9 @@ def run(opt):
 
     # Set the model.
     if opt.trained_model_path is None:
-        model = model_class.from_pretrained(model_name)
+        t5 = transformers.T5ForConditionalGeneration.from_pretrained(model_name)
+        model = src.model.FiDT5(t5.config)
+        model.load_t5(t5.state_dict())
         logger.info(f"Model initialized from {model_name}")
     else:
         load_path = Path(opt.trained_model_path) / 'checkpoint' / opt.trained_model_load_type
@@ -130,7 +132,9 @@ def run(opt):
             model = model_class.from_pretrained(load_path)
             logger.info(f"Model initialized from {load_path}")
         else:
-            model = model_class.from_pretrained(opt.trained_model_path)
+            t5 = transformers.T5ForConditionalGeneration.from_pretrained(opt.trained_model_path)
+            model = src.model.FiDT5(t5.config)
+            model.load_t5(t5.state_dict())
             logger.info(f"Model initialized from {opt.trained_model_path}")
     model.to(opt.device)
 
@@ -139,7 +143,7 @@ def run(opt):
 
     stopping_criteria = StoppingCriteriaList([src.util.StoppingCriteriaTokenIds(stop_ids=[2, 203, 206], device=opt.device)])
 
-    if opt.passage_mode == 'baseline':
+    if opt.passage_mode == 'pretrained' or opt.passage_mode == 'finetuned':
         is_append_question = False
     else:
         is_append_question = opt.is_append_question
