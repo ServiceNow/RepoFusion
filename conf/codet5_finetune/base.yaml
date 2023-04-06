@@ -18,11 +18,19 @@ test_size: 100000
 num_proc: 8
 seed: 42
 
+
+add_max_padding: False
+
 # Model params
+dataset_format_separate_data_pivot_points: True
+dataset_file: /repo_data/repo_preprocessed_data/medium_eval_prior_contexts.json
+dataset_cache_dir: /repo_data/hf_datasets_cashe
+
 eval_not_trained: True
 base_model_name: Salesforce/codet5-base
 trained_model_name: codet5-base-ntp-java
 model_dir_base: /repo_data/finetuning_checkpoints
+empty_model_dir: False
 # the split name must match between data and pivots
 training_split: train
 training_max_samples_count: -1

@@ -27,7 +27,8 @@ class DataCollatorNTP():
         tokenizer,
         min_encoder_seq_length, min_decoder_seq_length,
         encoder_seq_length, decoder_seq_length,
-        append_special_token_to_input=None
+        append_special_token_to_input=None,
+        add_max_padding=False
     ):
         self.ds_data = ds_data
         self.tokenizer = tokenizer
@@ -36,6 +37,7 @@ class DataCollatorNTP():
         self.encoder_seq_length = encoder_seq_length
         self.decoder_seq_length = decoder_seq_length
         self.append_special_token_to_input = append_special_token_to_input
+        self.add_max_padding = add_max_padding
         
     def __call__(self, examples, return_tensors="pt"):
         """
@@ -80,28 +82,6 @@ class DataCollatorNTP():
                 "This collate function only works for CodeT5's RobertaTokenizerFast."
             )
 
-        encoder_seq_length = self.encoder_seq_length
-        decoder_seq_length = self.decoder_seq_length
-        
-        examples_ids_and_masks = self.tokenizer([
-            self.ds_data[example['split']][example['data_idx']]['content'] for example in examples
-        ])
-        pivotpoints = [example['pivot'] for example in examples]
-        
-        # either take pre-selected pivot point if exist
-        # or randomly select a pivotpoint for each example
-        # the seed is device specific and set by accelerate,
-        # so this is deterministic. the midpoints will be
-        # different each batch and epoch
-        # NOTE: find how to set arbitrary seed for accelerate
-        pivotpoints = [
-            random.randint(
-                self.min_encoder_seq_length,
-                len(input_ids)-self.min_decoder_seq_length
-            ) if pivot is None else pivot
-            for input_ids, pivot in zip(examples_ids_and_masks['input_ids'], pivotpoints)
-        ]
-
         # the bos token is used to initialize the decoder_input_ids
         bos_token_id = self.tokenizer.bos_token_id
         if bos_token_id is None:
@@ -116,7 +96,58 @@ class DataCollatorNTP():
         pad_token_id = self.tokenizer.pad_token_id
         if pad_token_id is None:
             raise ValueError("The CodeT5 tokenizer should have a pad token.")
+
+        encoder_seq_length = self.encoder_seq_length
+        decoder_seq_length = self.decoder_seq_length
+        
+        if 'target' in examples[0]:
+            # format of data aready split by pivot point on str level
+            encoder_ids_and_masks = self.tokenizer(
+                [el['prior_context'] for el in examples],
+                add_special_tokens=False
+            )
+            encoder_examples_ids = [[bos_token_id]+el for el in encoder_ids_and_masks['input_ids']]
+            encoder_attention_mask = [[1]+el for el in encoder_ids_and_masks['attention_mask']]
             
+            label_ids = [el+[eos_token_id] for el in self.tokenizer(
+                    [el['target'] for el in examples],
+                    add_special_tokens=False,
+                    return_attention_mask=False
+                )['input_ids'] 
+            ]
+        else:
+            # format of pivot points dataset and data separatelly in ds_data
+            examples_ids_and_masks = self.tokenizer([
+                self.ds_data[example['split']][example['data_idx']]['content'] for example in examples
+            ])
+            pivotpoints = [example['pivot'] for example in examples]
+
+            # either take pre-selected pivot point if exist
+            # or randomly select a pivotpoint for each example
+            # the seed is device specific and set by accelerate,
+            # so this is deterministic. the midpoints will be
+            # different each batch and epoch
+            # NOTE: find how to set arbitrary seed for accelerate
+            pivotpoints = [
+                random.randint(
+                    self.min_encoder_seq_length,
+                    len(input_ids)-self.min_decoder_seq_length
+                ) if pivot is None else pivot
+                for input_ids, pivot in zip(examples_ids_and_masks['input_ids'], pivotpoints)
+            ]
+            encoder_examples_ids = [
+                example[: pivotpoints[i]]
+                for i, example in enumerate(examples_ids_and_masks['input_ids'])
+            ]
+            encoder_attention_mask = [
+                example[: pivotpoints[i]]
+                for i, example in enumerate(examples_ids_and_masks['attention_mask'])
+            ]
+            label_ids = [
+                example[pivotpoints[i]:]
+                for i, example in enumerate(examples_ids_and_masks['input_ids'])
+            ]
+
         if self.append_special_token_to_input is not None:
             append_special_token_to_input_id = self.tokenizer.vocab[self.append_special_token_to_input]
             encoder_seq_length -= 1
@@ -136,7 +167,7 @@ class DataCollatorNTP():
         ) -> list[int]:
             if (
                 len(label_seq) < encoder_seq_length - 1 and
-                (len(label_seq) == 0 or label_seq[0] != bos_token_id)
+                (len(label_seq) == 0 or label_seq[0] != added_val)
             ):
                 return [added_val] + label_seq
             else:
@@ -144,22 +175,31 @@ class DataCollatorNTP():
 
         example_dict["input_ids"] = [
             _add_bos_if_enough_space(
-                example[: pivotpoints[i]][-(encoder_seq_length - 1) :]
+                example[-(encoder_seq_length - 1) :]
             )
             + input_end
-            for i, example in enumerate(examples_ids_and_masks['input_ids'])
+            for example in encoder_examples_ids
         ]
         # truncate the attention_mask to the encoder_seq_length from the beginning
         example_dict["attention_mask"] = [
             _add_bos_if_enough_space(
-                example[: pivotpoints[i]][-(encoder_seq_length - 1) :],
+                example[-(encoder_seq_length - 1) :],
                 added_val=1,
             )
             + attention_mask_end
-            for i, example in enumerate(examples_ids_and_masks['attention_mask'])
+            for example in encoder_attention_mask
         ]
+
         # add padding to the input_ids and attention_mask
-        encoding: BatchEncoding = self.tokenizer.pad(example_dict, return_tensors="pt")
+        if not self.add_max_padding:
+            encoding: BatchEncoding = self.tokenizer.pad(example_dict, return_tensors="pt")
+        else:
+            encoding: BatchEncoding = self.tokenizer.pad(
+                example_dict,
+                padding='max_length',
+                max_length=self.encoder_seq_length,
+                return_tensors="pt"
+            )
 
         # truncate the labels to the decoder_seq_length from the end,
         # add the <s> (BOS) special token at the beginning, and
@@ -176,12 +216,15 @@ class DataCollatorNTP():
         labels = [
             [bos_token_id]
             + _add_eos_if_enough_space(
-                label_seq=example[pivotpoints[i] :][: decoder_seq_length - 1]
+                label_seq=example[: decoder_seq_length - 1]
             )
-            for i, example in enumerate(examples_ids_and_masks['input_ids'])
+            for example in label_ids
         ]
         # add padding to the labels using -100 as the ignore_index
-        max_label_length = max(len(label_seq) for label_seq in labels)
+        if not self.add_max_padding:
+            max_label_length = max(len(label_seq) for label_seq in labels)
+        else:
+            max_label_length = self.decoder_seq_length
         encoding["labels"] = torch.tensor(
             [
                 label_seq + [-100] * (max_label_length - len(label_seq))
@@ -196,14 +239,19 @@ class DataCollatorNTP():
             + (
                 [bos_token_id]
                 + _add_eos_if_enough_space(
-                    example[pivotpoints[i] :][: decoder_seq_length - 1]
+                    example[: decoder_seq_length - 1]
                 )
             )[:-1]
-            for i, example in enumerate(examples_ids_and_masks['input_ids'])
+            for example in label_ids
         ]
-        max_decoder_input_length = max(
-            len(decoder_input_id_seq) for decoder_input_id_seq in decoder_input_ids
-        )
+
+        if not self.add_max_padding:
+            max_decoder_input_length = max(
+                len(decoder_input_id_seq) for decoder_input_id_seq in decoder_input_ids
+            )
+        else:
+            max_decoder_input_length = self.decoder_seq_length
+
         assert max_decoder_input_length == max_label_length
         encoding["decoder_input_ids"] = torch.tensor(
             [
@@ -212,7 +260,7 @@ class DataCollatorNTP():
                 for decoder_input_id_seq in decoder_input_ids
             ]
         )
-        return encoding 
+        return encoding
     
 
 def get_debug_pivot_sets(ds_pivots, opt):
