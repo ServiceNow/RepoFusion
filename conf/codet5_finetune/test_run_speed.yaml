@@ -1,0 +1,52 @@
+logging_strategy: steps
+logging_steps: 100
+save_strategy: steps
+save_steps: 100
+save_total_limit: 3
+evaluation_strategy: steps
+eval_steps: 100
+metric_for_best_model: em_first_line_ratio
+greater_is_better: True
+predict_with_generate: True
+include_inputs_for_metrics: True
+fp16: True
+report_to: tensorboard
+dataloader_num_workers: 6
+
+
+
+append_special_token_to_input:
+
+
+# Test run options
+add_max_padding: True
+empty_model_dir: True
+eval_not_trained: False
+training_max_samples_count: -1
+eval_max_samples_count: 10000
+base_model_name: Salesforce/codet5-large
+
+min_encoder_seq_length: 0
+min_decoder_seq_length: 0
+encoder_seq_length: 2048
+decoder_seq_length: 512
+eval_generate_seq_length: 100
+evel_generate_use_eol_stop_tokens: True
+
+# if wold have been perfect 4e-6 and several epochs
+num_train_epochs: 2
+# True batch: per_gpu_batch_size * n_gpu * gradient_accumulation_steps
+gradient_accumulation_steps: 2
+per_device_train_batch_size: 3
+per_device_eval_batch_size: 40
+learning_rate: 1.0e-4
+lr_scheduler_type: linear
+warmup_steps: 100
+weight_decay: 0.5
+
+# metric computation params
+strip_new_lines_for_em: False
+
+# Debug options
+debug: False
+

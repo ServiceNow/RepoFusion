@@ -1,5 +1,6 @@
 import random
 import os
+import shutil
 from pathlib import Path
 import torch
 import numpy as np
@@ -56,30 +57,46 @@ def prepare_model_context(opt):
 
     opt.path_java_filtered_subset_root = Path(opt.path_java_filtered_subset_root)
 
-    ctx.ds_data = datasets.load_from_disk(
-        opt.path_java_filtered_subset_root / opt.java_filtered_subset_data_dir
-    )
-    print(f'{len(ctx.ds_data[opt.training_split])=}')
-    print(f'{len(ctx.ds_data[opt.eval_split])=}')
+    if opt.dataset_format_separate_data_pivot_points:
+        ctx.ds_data = datasets.load_from_disk(
+            opt.path_java_filtered_subset_root / opt.java_filtered_subset_data_dir
+        )
+        print(f'{len(ctx.ds_data[opt.training_split])=}')
+        print(f'{len(ctx.ds_data[opt.eval_split])=}')
 
-    ctx.ds_pivots = datasets.load_from_disk(
-        opt.path_java_filtered_subset_root / opt.java_filtered_subset_pivots_dir
-    )
-    if opt.debug:
-        ctx.ds_pivots = get_debug_pivot_sets(ctx.ds_pivots, opt)
-        assert_debug_data(ctx, opt)
-    else:
-        if opt.training_max_samples_count != -1:
-            ctx.ds_pivots[opt.training_split] = ctx.ds_pivots[opt.training_split].shuffle(
-                seed=opt.seed
-            ).select(range(opt.training_max_samples_count))
-        if opt.eval_max_samples_count != -1:
-            ctx.ds_pivots[opt.eval_split] = ctx.ds_pivots[opt.eval_split].shuffle(
-                seed=opt.seed
-            ).select(range(opt.eval_max_samples_count))
+        ctx.ds_pivots = datasets.load_from_disk(
+            opt.path_java_filtered_subset_root / opt.java_filtered_subset_pivots_dir
+        )
+        if opt.debug:
+            ctx.ds_pivots = get_debug_pivot_sets(ctx.ds_pivots, opt)
+            assert_debug_data(ctx, opt)
+        else:
+            if opt.training_max_samples_count != -1:
+                ctx.ds_pivots[opt.training_split] = ctx.ds_pivots[opt.training_split].shuffle(
+                    seed=opt.seed
+                ).select(range(opt.training_max_samples_count))
+            if opt.eval_max_samples_count != -1:
+                ctx.ds_pivots[opt.eval_split] = ctx.ds_pivots[opt.eval_split].shuffle(
+                    seed=opt.seed
+                ).select(range(opt.eval_max_samples_count))
 
-    print(f'{len(ctx.ds_pivots[opt.training_split])=}')
-    print(f'{len(ctx.ds_pivots[opt.eval_split])=}')
+        print(f'{len(ctx.ds_pivots[opt.training_split])=}')
+        print(f'{len(ctx.ds_pivots[opt.eval_split])=}')
+    else: 
+        ctx.ds_data = None
+        # for Now this format has just one instance of eval data
+        # and is not meant for training
+        ctx.ds_pivots = datasets.DatasetDict()
+        opt.dataset_file = Path(opt.dataset_file)
+        ctx.ds_pivots[opt.eval_split] = datasets.load_dataset(
+            str(opt.dataset_file.parent),
+            data_files=opt.dataset_file.name,
+            num_proc=opt.num_proc,
+            cache_dir=opt.dataset_cache_dir
+        )['train']
+        ctx.ds_pivots[opt.training_split] = ctx.ds_pivots[opt.eval_split]
+        print(f'{opt.dataset_file=}')
+        print(f'{len(ctx.ds_pivots[opt.eval_split])=}')
 
     ctx.tokenizer = AutoTokenizer.from_pretrained(opt.base_model_name)
 
@@ -91,10 +108,15 @@ def prepare_model_context(opt):
         encoder_seq_length=opt.encoder_seq_length,
         decoder_seq_length=opt.decoder_seq_length, 
         append_special_token_to_input=opt.append_special_token_to_input,
+        add_max_padding=opt.add_max_padding,
     )
 
     opt.model_dir_base = Path(opt.model_dir_base)
     ctx.model_dir = opt.model_dir_base  / opt.trained_model_name / opt.experiment_name
+
+    if opt.empty_model_dir and opt.is_main:
+        print(f'Emptying model dir: {ctx.model_dir}')
+        shutil.rmtree(ctx.model_dir, ignore_errors=True)
 
     # NOTE: move it to compute metric itself?
     examples_dir = ctx.model_dir / 'examples'
