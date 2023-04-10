@@ -34,6 +34,7 @@ class Dataset(torch.utils.data.Dataset):
         tokenizer=None, 
         is_append_question=True, 
         num_of_examples=-1,
+        model_type='codet5',
     ):
         assert data_path
         if features_format_file is not None:
@@ -105,6 +106,7 @@ class Dataset(torch.utils.data.Dataset):
             self.title_prefix = ''
             self.passage_prefix = ''
             self.question_prefix = ''
+            self.model_type = model_type
 
     def __len__(self):
         if self.ds is None:
@@ -116,14 +118,47 @@ class Dataset(torch.utils.data.Dataset):
         for i in range(0, len(l), n):
             yield l[i:i + n]
 
+    def get_rule_context_length(self, question, rule_title):
+        if rule_title == 'codex':
+            truncation_strategy = 'front'
+        else:
+            truncation_strategy = 'back'
+        net_string = self.title_prefix + " " + rule_title + " " + self.passage_prefix + " "
+        rule_title_len = len(self.tokenizer(net_string).input_ids)
+        if self.is_append_question:
+            question = question + " "
+            question_tokens_len = len(self.tokenizer(question).input_ids)
+            rule_context_len = self.text_maxlen - (question_tokens_len + rule_title_len)
+        else:
+            rule_context_len = self.text_maxlen - rule_title_len
+        return rule_context_len, truncation_strategy
+
+    def truncate_rule_context(self, text, max_length, truncation_strategy='back'):
+        text_tokens = self.tokenizer(text).input_ids
+        if len(text_tokens) > max_length:
+            if truncation_strategy == 'front':
+                # take the last max_length tokens.
+                text_tokens = text_tokens[-max_length:]
+            else:
+                # truncate the first max_length tokens.
+                text_tokens = text_tokens[:max_length]
+        return self.tokenizer.decode(text_tokens, skip_special_tokens=True)
+
+    def truncate_contexts(self, contexts, question):
+        for context in contexts:
+            rule_context_len, rule_truncation_strategy = self.get_rule_context_length(question, context['title'])
+            context['text'] = self.truncate_rule_context(context['text'], rule_context_len, rule_truncation_strategy)
+        return contexts
+
     def get_contexts(self, contexts, question=None):
         # the passages are already stored in sorted rule order.
-
         if self.passage_mode == 'pretrained' or self.passage_mode == 'finetuned':
-            return [contexts[16]]
+            prior_context = contexts[16]
+            prior_context['text'] = self.truncate_rule_context(prior_context['text'], self.text_maxlen, truncation_strategy='front')
+            return [prior_context]
 
         if self.passage_mode == 'truncation-direct':
-            return contexts[:self.n_context]
+            return self.truncate_contexts(contexts[:self.n_context], question)
 
         # the default codex context is always the last passage. This is based on the understanding that the encoded representations
         # of the rules are concatenated in the order of the passages. Therefore, the decoder attends to this context last such that
@@ -132,24 +167,20 @@ class Dataset(torch.utils.data.Dataset):
             codex_context = contexts.pop(16) # 16 is the index of the default codex context.
             contexts_without_codex = contexts[:(self.n_context-1)]
             contexts_without_codex.append(codex_context)
-            return contexts_without_codex
+            return self.truncate_contexts(contexts_without_codex, question)
 
         # randomly shuffle the contexts. rule order is distorted here.
         elif self.passage_mode == 'truncation-random':
             random.shuffle(contexts)
-            return contexts[:self.n_context]
+            return self.truncate_contexts(contexts[:self.n_context], question)
 
         # split the non-empty contexts into chunks till it fits in context length in the sorted order.
         elif self.passage_mode == 'no-truncation-direct':
-            if self.is_append_question:
-                question_tokens_len = len(self.tokenizer(question)['input_ids'])
-                rule_context_len = self.text_maxlen - question_tokens_len
-            else:
-                rule_context_len = self.text_maxlen
             modified_contexts = []
             for context in contexts:
                 if context['text']:
-                    tokens = self.tokenizer(context['text'])['input_ids']
+                    tokens = self.tokenizer(context['text']).input_ids
+                    rule_context_len, _ = self.get_rule_context_length(question, context['title'])
                     parts = list(self.divide_chunks(tokens, rule_context_len))
                     for part in parts:
                         if len(part) > 0:
@@ -158,38 +189,53 @@ class Dataset(torch.utils.data.Dataset):
                                                     'score': context['score']})
             return modified_contexts[:self.n_context]
 
-        elif self.passage_mode == 'no-truncation-codex-last':
-            if self.is_append_question:
-                question_tokens_len = len(self.tokenizer(question)['input_ids'])
-                rule_context_len = self.text_maxlen - question_tokens_len
-            else:
-                rule_context_len = self.text_maxlen           
+        elif self.passage_mode == 'no-truncation-codex-last':          
             modified_contexts = []
-
             codex_context = contexts.pop(16) # 16 is the index of the default codex context.
             if codex_context['text']:
-                codex_tokens = self.tokenizer(codex_context['text'])['input_ids']
+                codex_tokens = self.tokenizer(codex_context['text']).input_ids
+                rule_context_len, _ = self.get_rule_context_length(question, codex_context['title'])
                 codex_parts = list(self.divide_chunks(codex_tokens, rule_context_len))
             else:
                 codex_parts = []
 
             for context in contexts:
                 if context['text']:
-                    tokens = self.tokenizer(context['text'])['input_ids']
+                    # Think how to do formatting here.
+                    tokens = self.tokenizer(context['text']).input_ids
+                    rule_context_len, _ = self.get_rule_context_length(question, context['title'])
                     parts = list(self.divide_chunks(tokens, rule_context_len))              
                     for part in parts:
                         if len(part) > 0:
                             modified_contexts.append({'title': context['title'], \
                                                     'text': self.tokenizer.decode(part, skip_special_tokens=True), \
                                                     'score': context['score']})
-            
-            contexts_before_codex = modified_contexts[:(self.n_context-len(codex_parts))]
+
+            if self.n_context >= len(codex_parts):
+                # take only contexts before the codex context such that the codex context can fit in later.
+                contexts_before_codex = modified_contexts[:(self.n_context - len(codex_parts))]
+            else:
+                # take only n_context codex parts starting from the back.
+                codex_parts = codex_parts[-self.n_context:]
+                contexts_before_codex = []
             for part in codex_parts:
                 if len(part) > 0:
-                    contexts_before_codex.append({'title': context['title'], \
+                    contexts_before_codex.append({'title': codex_context['title'], \
                                                 'text': self.tokenizer.decode(part, skip_special_tokens=True), \
-                                                'score': context['score']})
+                                                'score': codex_context['score']})
             return contexts_before_codex
+
+    def get_formatted_passages_and_scores(self, contexts):
+        if (self.passage_mode == 'finetuned' and self.model_type == 'codet5') or (self.passage_mode == 'pretrained' and self.model_type == 'codegen'):
+            passages = [c['text'] for c in contexts]
+        elif (self.passage_mode == 'pretrained' and self.model_type == 'codet5'):
+            passages = [c['text'] + '<extra_id_0>' for c in contexts]
+        else:
+            f = self.title_prefix + " {} " + self.passage_prefix + " {}"   
+            passages = [f.format(c['title'], c['text']) for c in contexts]
+        scores = [float(c['score']) for c in contexts]
+        scores = torch.tensor(scores)
+        return passages, scores
 
     def __getitem__(self, index):
         if self.ds is None:
@@ -201,17 +247,9 @@ class Dataset(torch.utils.data.Dataset):
         target = example['target']
 
         if 'ctxs' in example and self.n_context is not None:
-            f = self.title_prefix + " {} " + self.passage_prefix + " {}"
             contexts = self.get_contexts(example['ctxs'], question)
             if len(contexts) > 0:
-                if self.passage_mode == 'finetuned':
-                    passages = [c['text'] for c in contexts]
-                elif self.passage_mode == 'pretrained':
-                    passages = [c['text'] + '<extra_id_0>' for c in contexts]
-                else:   
-                    passages = [f.format(c['title'], c['text']) for c in contexts]
-                scores = [float(c['score']) for c in contexts]
-                scores = torch.tensor(scores)
+                passages, scores = self.get_formatted_passages_and_scores(contexts)
             else:
                 passages, scores = None, None
                 # TODO(egrave): do we want to keep this?
@@ -219,12 +257,6 @@ class Dataset(torch.utils.data.Dataset):
                 #     contexts = [question]
         else:
             passages, scores = None, None
-
-        # print("index: ", index)
-        # print("question: ", question)
-        # print("target: ", target)
-        # print("passages: ", passages)
-        # print("scores: ", scores)
 
         return {
             'index' : index,
@@ -247,18 +279,17 @@ class Dataset(torch.utils.data.Dataset):
             return example
         return  self.ds[index]
 
+       
 def encode_passages(batch_text_passages, tokenizer, max_length):
     passage_ids, passage_masks = [], []
     for k, text_passages in enumerate(batch_text_passages):
         p = tokenizer(
-            text_passages,
-            max_length=max_length,
-            padding='max_length',
-            return_tensors='pt',
-            truncation=True,
-            # truncate from the beginning to keep the end of the passage which is the hole context.
-            truncation_side='left',
-        )
+                text_passages,
+                max_length=max_length,
+                padding='max_length',
+                return_tensors='pt',
+                truncation=True,
+            )
         passage_ids.append(p['input_ids'][None])
         passage_masks.append(p['attention_mask'][None])
 
@@ -273,10 +304,17 @@ class Collator(object):
         self.answer_maxlength = answer_maxlength
         self.is_append_question = is_append_question
 
+    def truncate_from_left(self, text):
+        tokens = self.tokenizer(text, truncation=False).input_ids
+        if len(tokens) > self.text_maxlength:
+            tokens = tokens[-self.text_maxlength:]
+        return self.tokenizer.decode(tokens, skip_special_tokens=False)
+    
     def __call__(self, batch):
         assert(batch[0]['target'] != None)
         index = torch.tensor([ex['index'] for ex in batch])
         target = [ex['target'] for ex in batch]
+        #print("Target:", target)
         target = self.tokenizer(
             target,
             max_length=self.answer_maxlength if self.answer_maxlength > 0 else None,
@@ -284,6 +322,7 @@ class Collator(object):
             return_tensors='pt',
             truncation=True if self.answer_maxlength > 0 else False,
         )
+        
         target_ids = target["input_ids"]
         target_mask = target["attention_mask"].bool()
         target_ids = target_ids.masked_fill(~target_mask, -100)
@@ -294,14 +333,17 @@ class Collator(object):
             appended_passages = []
             if self.is_append_question:
                 for t in example['passages']:
-                    # append the hole_context after the rule_context because we want completion to be conditioned on the hole_context.
+                    # append the hole_context after the rule_context because we want completion to be conditioned 
+                    # on the hole_context.
                     appended_passages.append(t + " " + example['question'])
             else:
                 appended_passages = example['passages']
-            return appended_passages
+            appended_and_truncated_passages = [self.truncate_from_left(p) for p in appended_passages]
+            return appended_and_truncated_passages
         
         text_passages = [append_question(example) for example in batch]
-        #print(text_passages)
+        # for passage in text_passages[0]:
+        #     print("Passage:", passage)
         passage_ids, passage_masks = encode_passages(text_passages,
                                                      self.tokenizer,
                                                      self.text_maxlength)

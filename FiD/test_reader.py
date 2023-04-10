@@ -12,7 +12,7 @@ from pathlib import Path
 import torch.distributed as dist
 import multiprocessing
 from torch.utils.data import DataLoader, SequentialSampler
-from transformers import StoppingCriteriaList, T5ForConditionalGeneration
+from transformers import StoppingCriteriaList, AutoTokenizer, AutoModelForCausalLM
 
 
 import src.slurm
@@ -121,27 +121,40 @@ def run(opt):
     logger.info(f"Output Path: {output_path}")
 
     # Set the model.
-    if opt.trained_model_path is None:
-        t5 = transformers.T5ForConditionalGeneration.from_pretrained(model_name)
-        model = src.model.FiDT5(t5.config)
-        model.load_t5(t5.state_dict())
-        logger.info(f"Model initialized from {model_name}")
-    else:
-        load_path = Path(opt.trained_model_path) / 'checkpoint' / opt.trained_model_load_type
-        if load_path.exists():
-            model = model_class.from_pretrained(load_path)
-            logger.info(f"Model initialized from {load_path}")
-        else:
-            t5 = transformers.T5ForConditionalGeneration.from_pretrained(opt.trained_model_path)
+    if opt.model_type == 'codet5': 
+        # pretrained       
+        if opt.trained_model_path is None:
+            t5 = transformers.T5ForConditionalGeneration.from_pretrained(model_name)
             model = src.model.FiDT5(t5.config)
             model.load_t5(t5.state_dict())
-            logger.info(f"Model initialized from {opt.trained_model_path}")
+            logger.info(f"Model initialized from {model_name}")
+        else:
+            load_path = Path(opt.trained_model_path) / 'checkpoint' / opt.trained_model_load_type
+            # FiD model
+            if load_path.exists():
+                model = model_class.from_pretrained(load_path)
+                logger.info(f"Model initialized from {load_path}")
+            # finetuned model
+            else:
+                t5 = transformers.T5ForConditionalGeneration.from_pretrained(opt.trained_model_path)
+                model = src.model.FiDT5(t5.config)
+                model.load_t5(t5.state_dict())
+                logger.info(f"Model initialized from {opt.trained_model_path}")
+    if opt.model_type == 'codegen':
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+        logger.info(f"Model initialized from {model_name}")
     model.to(opt.device)
 
-    # Set the tokenizer and initialize the collator.
-    tokenizer = transformers.RobertaTokenizer.from_pretrained(model_name)
+    # Set the tokenizer and stop token IDS (corresponds to EOS, \n and \r in that order).
+    if opt.model_type == 'codet5':
+        tokenizer = transformers.RobertaTokenizer.from_pretrained(model_name)
+        stop_ids = [2, 203, 206]
+    if opt.model_type == 'codegen':
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        stop_ids = [50256, 198, 201]
+        tokenizer.pad_token = tokenizer.eos_token
 
-    stopping_criteria = StoppingCriteriaList([src.util.StoppingCriteriaTokenIds(stop_ids=[2, 203, 206], device=opt.device)])
+    stopping_criteria = StoppingCriteriaList([src.util.StoppingCriteriaTokenIds(stop_ids=stop_ids, device=opt.device)])
 
     if opt.passage_mode == 'pretrained' or opt.passage_mode == 'finetuned':
         is_append_question = False
@@ -168,7 +181,8 @@ def run(opt):
                                         passage_mode=opt.passage_mode, \
                                         is_append_question=opt.is_append_question, \
                                         text_maxlen=opt.text_maxlength, \
-                                        num_of_examples=opt.num_of_eval_examples_per_gpu)
+                                        num_of_examples=opt.num_of_eval_examples_per_gpu, 
+                                        model_type=opt.model_type)
         logger.info(f'Loaded {len(eval_dataset)} validation examples from {opt.eval_data}')
     else:
         eval_dataset = src.data.Dataset(
@@ -185,7 +199,8 @@ def run(opt):
             passage_mode=opt.passage_mode,
             is_append_question=opt.is_append_question,
             text_maxlen=opt.text_maxlength,
-            num_of_examples=opt.num_of_eval_examples_per_gpu
+            num_of_examples=opt.num_of_eval_examples_per_gpu,
+            model_type=opt.model_type,
         )
         logger.info(f'Loaded {len(eval_dataset)} validation examples from {opt.dataset_path}:{opt.eval_split_name}')
 

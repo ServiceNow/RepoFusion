@@ -44,7 +44,7 @@ def generate_and_calculate_em(model, tokenizer, dataset, idx, context_ids, conte
 
     return exactmatch, total, (ans, gold)
 
-def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, collator, best_dev_em, checkpoint_path, tokenizer, logger, stopping_criteria):
+def train(model, optimizer, scheduler, global_step, train_dataset, eval_dataset, opt, collator, best_dev_em, checkpoint_path, tokenizer, logger, stopping_criteria):
     global torch
     if opt.is_main:
         try:
@@ -68,13 +68,14 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
 
     curr_loss = 0.0
     epoch = 1
+    step = 0
     model.train()
     while step < opt.total_steps:
         epoch += 1
         for i, batch in enumerate(train_dataloader):
             step += 1
-            # if step >= 235:
-            #     print("step", step)
+            if step <= global_step:
+                continue
             if step % 100 == 0:
                 logger.info(f"Step {step} / {opt.total_steps}")
 
@@ -258,10 +259,15 @@ def run(opt):
 
     stopping_criteria = StoppingCriteriaList([src.util.StoppingCriteriaTokenIds(stop_ids=[2, 203, 206], device=opt.device)])
 
+    if opt.passage_mode == 'pretrained' or opt.passage_mode == 'finetuned':
+        is_append_question = False
+    else:
+        is_append_question = opt.is_append_question
+        
     collator = src.data.Collator(text_maxlength=opt.text_maxlength, \
                                     tokenizer=tokenizer, \
                                     answer_maxlength=opt.answer_maxlength,
-                                    is_append_question=opt.is_append_question)
+                                    is_append_question=is_append_question)
 
     # Load the training and validation data. The data is split across multiple GPUs.
 

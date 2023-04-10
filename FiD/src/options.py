@@ -79,7 +79,7 @@ class Options():
             type=str, default='/repo_data/hf_datasets_cashe',
             help='forder path to use as datasets chache, None will result in default'
         )
-
+        self.parser.add_argument('--model_type', type=str, default='codet5', help='type of the model')
         self.parser.add_argument('--model_name', type=str, default='Salesforce/codet5', help='model name without size')
         self.parser.add_argument('--model_max_length', type=int, default=512, help='model_max_length for tokenizer')
         self.parser.add_argument('--model_size', type=str, default='base')
@@ -142,7 +142,7 @@ class Options():
         # training parameters
         self.parser.add_argument('--eval_loss_freq', type=int, default=5000,
                         help='evaluate model loss every <eval_freq> steps during training')
-        self.parser.add_argument('--save_freq', type=int, default=2000,
+        self.parser.add_argument('--save_freq', type=int, default=500,
                         help='save model every <save_freq> steps during training')
         self.parser.add_argument('--eval_em_freq', type=int, default=5000,
                         help='evaluate model EM every <eval_em_freq> steps')
