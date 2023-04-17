@@ -154,6 +154,8 @@ class Dataset(torch.utils.data.Dataset):
         # the passages are already stored in sorted rule order.
         if self.passage_mode == 'pretrained' or self.passage_mode == 'finetuned':
             prior_context = contexts[16]
+            if not prior_context['text'] and self.model_type == 'codegen':
+                return []
             prior_context['text'] = self.truncate_rule_context(prior_context['text'], self.text_maxlen, truncation_strategy='front')
             return [prior_context]
 
@@ -263,7 +265,8 @@ class Dataset(torch.utils.data.Dataset):
             'question' : question,
             'target' : target,
             'passages' : passages,
-            'scores' : scores
+            'scores' : scores,
+            'hole_id': example['id'],
         }
 
     # def sort_data(self):
@@ -280,7 +283,7 @@ class Dataset(torch.utils.data.Dataset):
         return  self.ds[index]
 
        
-def encode_passages(batch_text_passages, tokenizer, max_length):
+def encode_passages(batch_text_passages, tokenizer, max_length, model_type):
     passage_ids, passage_masks = [], []
     for k, text_passages in enumerate(batch_text_passages):
         p = tokenizer(
@@ -290,31 +293,40 @@ def encode_passages(batch_text_passages, tokenizer, max_length):
                 return_tensors='pt',
                 truncation=True,
             )
-        passage_ids.append(p['input_ids'][None])
-        passage_masks.append(p['attention_mask'][None])
+        # if len(p['input_ids'][0])==512:
+        #     print(f"Decoded:{tokenizer.decode(p['input_ids'][0])}, Passages:{text_passages}")
+        if model_type == 'codet5':
+            passage_ids.append(p['input_ids'][None])
+            passage_masks.append(p['attention_mask'][None])
+
+        if model_type == 'codegen':
+            passage_ids.append(p['input_ids'])
+            passage_masks.append(p['attention_mask'])
 
     passage_ids = torch.cat(passage_ids, dim=0)
     passage_masks = torch.cat(passage_masks, dim=0)
     return passage_ids, passage_masks.bool()
 
 class Collator(object):
-    def __init__(self, text_maxlength, tokenizer, answer_maxlength=20, is_append_question=True):
+    def __init__(self, text_maxlength, tokenizer, answer_maxlength=20, is_append_question=True, model_type='codet5'):
         self.tokenizer = tokenizer
         self.text_maxlength = text_maxlength
         self.answer_maxlength = answer_maxlength
         self.is_append_question = is_append_question
+        self.model_type = model_type
 
     def truncate_from_left(self, text):
         tokens = self.tokenizer(text, truncation=False).input_ids
         if len(tokens) > self.text_maxlength:
             tokens = tokens[-self.text_maxlength:]
-        return self.tokenizer.decode(tokens, skip_special_tokens=False)
+        return self.tokenizer.decode(tokens, skip_special_tokens=True)
     
     def __call__(self, batch):
         assert(batch[0]['target'] != None)
         index = torch.tensor([ex['index'] for ex in batch])
         target = [ex['target'] for ex in batch]
-        #print("Target:", target)
+        string_target = target
+        hole_id = [ex['hole_id'] for ex in batch]
         target = self.tokenizer(
             target,
             max_length=self.answer_maxlength if self.answer_maxlength > 0 else None,
@@ -342,11 +354,12 @@ class Collator(object):
             return appended_and_truncated_passages
         
         text_passages = [append_question(example) for example in batch]
-        # for passage in text_passages[0]:
-        #     print("Passage:", passage)
-        passage_ids, passage_masks = encode_passages(text_passages,
-                                                     self.tokenizer,
-                                                     self.text_maxlength)
+        # if index.item()==301:
+        #    print(f"passage: {text_passages[0]}, target: {string_target}, hole_id: {hole_id}, index: {index}")
+        passage_ids, passage_masks = encode_passages(batch_text_passages=text_passages,
+                                                     tokenizer=self.tokenizer,
+                                                     max_length=self.text_maxlength,
+                                                     model_type=self.model_type)
         return (index, target_ids, target_mask, passage_ids, passage_masks)
 
 # def load_data(data_path=None, global_rank=-1, world_size=-1):

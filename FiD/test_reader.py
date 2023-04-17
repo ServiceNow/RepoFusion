@@ -48,23 +48,35 @@ def evaluate(model, dataset, collator, tokenizer, opt, stopping_criteria, logger
     with torch.no_grad():
         for i, batch in enumerate(dataloader):
             (idx, labels, _, context_ids, context_mask) = batch
+            #if idx.item() == 301:
             # print("context_ids", context_ids.shape)
             # print("context_mask", context_mask.shape)
             # print("labels", labels.shape)
             # print("idx", idx)
+            if context_ids.size(1) == 0:
+                raise ValueError("The context_ids tensor is empty along dimension 1. Id is {}".format(idx.item()))
 
             if opt.write_crossattention_scores:
                 model.reset_score_storage()
             
-            outputs = model.generate(input_ids=context_ids.cuda(),
-                            attention_mask=context_mask.cuda(),
-                            max_length=100, 
-                            stopping_criteria=stopping_criteria)
+            if opt.model_type == 'codet5':
+                outputs = model.generate(input_ids=context_ids.cuda(),
+                                attention_mask=context_mask.cuda(),
+                                max_length=100) 
+                                #stopping_criteria=stopping_criteria)
+            
+            elif opt.model_type == 'codegen':
+                outputs = model.generate(input_ids=context_ids.cuda(),
+                                attention_mask=context_mask.cuda(),
+                                max_length=opt.text_maxlength + 100)
+                starting_pos = context_ids.shape[1]
 
             if opt.write_crossattention_scores:
                 crossattention_scores = model.get_crossattention_scores(context_mask.cuda())
 
             for k, o in enumerate(outputs):
+                if opt.model_type == 'codegen':
+                    o = o[starting_pos:]
                 ans = tokenizer.decode(o, skip_special_tokens=True)
                 example = dataset.get_example(idx[k].item())
                 gold = example['target']
@@ -115,11 +127,21 @@ def run(opt):
     )
 
     model_name = opt.model_name + '-' +opt.model_size
-    model_class = src.model.FiDT5
     logger.info(f"Options: {opt}")
     logger.info(f"Model: {model_name}")
     logger.info(f"Output Path: {output_path}")
 
+    # Set the tokenizer and stop token IDS (corresponds to EOS, \n and \r in that order).
+    if opt.model_type == 'codet5':
+        tokenizer = transformers.RobertaTokenizer.from_pretrained(model_name)
+        stop_ids = [2, 203, 206]
+    if opt.model_type == 'codegen':
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        stop_ids = [50256, 198, 201]
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        tokenizer.padding_side = 'left'
+        
     # Set the model.
     if opt.model_type == 'codet5': 
         # pretrained       
@@ -132,6 +154,7 @@ def run(opt):
             load_path = Path(opt.trained_model_path) / 'checkpoint' / opt.trained_model_load_type
             # FiD model
             if load_path.exists():
+                model_class = src.model.FiDT5
                 model = model_class.from_pretrained(load_path)
                 logger.info(f"Model initialized from {load_path}")
             # finetuned model
@@ -140,19 +163,13 @@ def run(opt):
                 model = src.model.FiDT5(t5.config)
                 model.load_t5(t5.state_dict())
                 logger.info(f"Model initialized from {opt.trained_model_path}")
+
     if opt.model_type == 'codegen':
-        model = AutoModelForCausalLM.from_pretrained(model_name)
+        print("Starting to load model") 
+        print(model_name)
+        model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16, pad_token_id=tokenizer.eos_token_id)
         logger.info(f"Model initialized from {model_name}")
     model.to(opt.device)
-
-    # Set the tokenizer and stop token IDS (corresponds to EOS, \n and \r in that order).
-    if opt.model_type == 'codet5':
-        tokenizer = transformers.RobertaTokenizer.from_pretrained(model_name)
-        stop_ids = [2, 203, 206]
-    if opt.model_type == 'codegen':
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        stop_ids = [50256, 198, 201]
-        tokenizer.pad_token = tokenizer.eos_token
 
     stopping_criteria = StoppingCriteriaList([src.util.StoppingCriteriaTokenIds(stop_ids=stop_ids, device=opt.device)])
 
@@ -164,7 +181,8 @@ def run(opt):
     collator = src.data.Collator(text_maxlength=opt.text_maxlength, \
                                     tokenizer=tokenizer, \
                                     answer_maxlength=opt.answer_maxlength,
-                                    is_append_question=is_append_question)
+                                    is_append_question=is_append_question,
+                                    model_type=opt.model_type)
 
 
     # NOTE: either specify eval_data to load with custom implementation or 
