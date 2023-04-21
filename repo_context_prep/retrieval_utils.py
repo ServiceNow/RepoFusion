@@ -3,6 +3,7 @@ from utils import *
 import numpy as np
 import torch
 from transformers import AutoModel
+from rank_bm25 import BM25Okapi
 
 class getRetrievalContext():
 
@@ -15,8 +16,8 @@ class getRetrievalContext():
     self.identifier_usage_data = identifier_usage_data
     self.emb_model = emb_model
     self.device = device
-    self.emb_model = self.emb_model.to(self.device)
-    print(self.device)
+    if self.emb_model is not None:
+      self.emb_model = self.emb_model.to(self.device)
 
   def set_hole_pos(self, hole_pos):
     self.hole_pos = hole_pos
@@ -100,7 +101,7 @@ class getRetrievalContext():
     return usage_windows
 
   def get_identifier_usage_windows(self):
-    # get all identifiers in the hole window region exluding the hole itself.
+    # get all identifiers in the hole window region excluding the hole itself.
     candidate_identifiers = self.get_sorted_identifiers_near_the_hole()
     # if no identifiers found in the hole window
     if not candidate_identifiers:
@@ -131,12 +132,11 @@ class getRetrievalContext():
     if len(iden_usage_windows) > 64:
         np.random.shuffle(iden_usage_windows)
         iden_usage_windows = iden_usage_windows[:64]
-    #print(iden_usage_windows[0])
     sorted_iden_usage_windows = []
     hole_window = self.get_hole_window()
     hole_repr = self.get_context_embedding(hole_window)
     iden_repr = self.get_context_embedding(iden_usage_windows)
-    print(hole_repr.shape, iden_repr.shape)
+    #print(hole_repr.shape, iden_repr.shape)
     iden_scores = torch.squeeze(torch.matmul(hole_repr, iden_repr.transpose(0, 1)), dim=0)
     # print(hole_repr.shape, iden_repr.shape, iden_scores.shape)
     # print(iden_scores)
@@ -149,6 +149,29 @@ class getRetrievalContext():
     sorted_iden_usage_windows = sorted(sorted_iden_usage_windows, key=lambda x: x[1], reverse=True)
     sorted_iden_usage_windows = [x for (x, y) in sorted_iden_usage_windows]
     return sorted_iden_usage_windows
+
+  def get_bm25_sorted_contexts(self):
+    all_files = list(self.parse_data.keys())
+    #chosen_file = np.random.choice(candidate_files)
+    tokenized_corpus = []
+    corpus = []
+    for file in all_files:
+      if file == self.file:
+        file_lines = open(file, encoding="utf8", errors='backslashreplace').readlines()
+        del file_lines[self.hole_pos[0]]
+        file_content = '\n'.join(file_lines)
+      else:
+        file_content = open(file, encoding="utf8", errors='backslashreplace').read()
+      corpus.append(file_content)
+      tokenized_corpus.append(file_content.split(" "))
+    bm25 = BM25Okapi(tokenized_corpus)
+    query = self.get_hole_window()
+    # print(self.file, self.hole_pos, query, len(corpus))
+    tokenized_query = query.split(" ")
+    sorted_contexts = bm25.get_top_n(tokenized_query, corpus, n=100)
+    return sorted_contexts
+
+
 
 
 

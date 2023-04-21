@@ -4,6 +4,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 import torch
 import json
 import transformers
@@ -22,7 +23,7 @@ import src.data
 import src.evaluation
 import src.model
 
-def evaluate(model, dataset, collator, tokenizer, opt, stopping_criteria, logger, output_path):
+def evaluate(model, dataset, collator, tokenizer, opt, stopping_criteria, logger, output_path, start_idx=0):
     # sample sequentially for evaluation.
     sampler = SequentialSampler(dataset)
     dataloader = DataLoader(dataset,
@@ -45,10 +46,13 @@ def evaluate(model, dataset, collator, tokenizer, opt, stopping_criteria, logger
 
     total = 0
     exactmatch = []
+    count = 0
     with torch.no_grad():
         for i, batch in enumerate(dataloader):
             (idx, labels, _, context_ids, context_mask) = batch
-            #if idx.item() == 301:
+            count += (i + 1) * opt.per_gpu_batch_size
+            if count < start_idx:
+                continue
             # print("context_ids", context_ids.shape)
             # print("context_mask", context_mask.shape)
             # print("labels", labels.shape)
@@ -119,6 +123,15 @@ def run(opt):
 
     if opt.write_results:
         (output_path / 'test_results').mkdir(parents=True, exist_ok=True)
+
+    partial_result_file = os.path.join(output_path, 'test_results', '0.jsonl')
+    if os.path.exists(partial_result_file):
+        print('Partial result file exists, calculation point of start')
+        with open(partial_result_file, 'r') as f:
+            lines = f.readlines()
+            start_idx = len(lines)
+    else:
+        start_idx = 0
         
     logger = src.util.init_logger(
         opt.is_main,
@@ -231,7 +244,8 @@ def run(opt):
                                 opt,
                                 stopping_criteria, 
                                 logger,
-                                output_path)
+                                output_path,
+                                start_idx)
 
     logger.info(f'EM {100*exactmatch:.2f}, Total number of example {total}')
 
