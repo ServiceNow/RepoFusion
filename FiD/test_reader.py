@@ -129,6 +129,12 @@ def run(opt):
     if opt.write_results:
         (output_path / 'test_results').mkdir(parents=True, exist_ok=True)
 
+    logger = src.util.init_logger(
+        opt.is_main,
+        opt.is_distributed,
+        output_path / 'run.log'
+    )
+    
     # partial_result_file = os.path.join(output_path, 'test_results', '0.jsonl')
     # if os.path.exists(partial_result_file):
     #     logger.info('Partial result file exists, calculating point of start')
@@ -138,12 +144,6 @@ def run(opt):
     # else:
     start_idx = 0
     logger.info(f'Starting from index {start_idx}')
-        
-    logger = src.util.init_logger(
-        opt.is_main,
-        opt.is_distributed,
-        output_path / 'run.log'
-    )
 
     model_name = opt.model_name + '-' +opt.model_size
     logger.info(f"Options: {opt}")
