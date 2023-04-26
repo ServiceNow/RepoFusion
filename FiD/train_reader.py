@@ -74,8 +74,8 @@ def train(model, optimizer, scheduler, global_step, train_dataset, eval_dataset,
         epoch += 1
         for i, batch in enumerate(train_dataloader):
             step += 1
-            if step <= global_step:
-                continue
+            # if step <= global_step:
+            #     continue
             if step % 100 == 0:
                 logger.info(f"Step {step} / {opt.total_steps}")
 

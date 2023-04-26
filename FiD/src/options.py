@@ -40,7 +40,7 @@ class Options():
         self.parser.add_argument('--output_dir', type=str, \
                             default='/repo_data/repo_FID/evaluation', \
                                 help='path of the output directory')
-        self.parser.add_argument('--eval_print_freq', type=int, default=1000, help='print frequency')
+        self.parser.add_argument('--eval_print_freq', type=int, default=100, help='print frequency')
 
 
     def add_reader_options(self):

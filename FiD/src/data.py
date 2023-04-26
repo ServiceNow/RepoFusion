@@ -100,7 +100,7 @@ class Dataset(torch.utils.data.Dataset):
         self.tokenizer = tokenizer
         self.is_append_question = is_append_question
 
-        if self.passage_mode == 'pretrained' or self.passage_mode == 'finetuned':
+        if self.passage_mode == 'pretrained' or self.passage_mode == 'finetuned' or self.passage_mode == 'toprule+prior':
             self.n_context = 1
             self.is_append_question = False
             self.title_prefix = ''
@@ -142,12 +142,12 @@ class Dataset(torch.utils.data.Dataset):
             else:
                 # truncate the first max_length tokens.
                 text_tokens = text_tokens[:max_length]
-        return self.tokenizer.decode(text_tokens, skip_special_tokens=True)
+        return self.tokenizer.decode(text_tokens, skip_special_tokens=True), len(text_tokens)
 
     def truncate_contexts(self, contexts, question):
         for context in contexts:
             rule_context_len, rule_truncation_strategy = self.get_rule_context_length(question, context['title'])
-            context['text'] = self.truncate_rule_context(context['text'], rule_context_len, rule_truncation_strategy)
+            context['text'], _ = self.truncate_rule_context(context['text'], rule_context_len, rule_truncation_strategy)
         return contexts
 
     def get_contexts(self, contexts, question=None):
@@ -156,8 +156,29 @@ class Dataset(torch.utils.data.Dataset):
             prior_context = contexts[16]
             if not prior_context['text'] and self.model_type == 'codegen':
                 return []
-            prior_context['text'] = self.truncate_rule_context(prior_context['text'], self.text_maxlen, truncation_strategy='front')
+            prior_context['text'], _ = self.truncate_rule_context(prior_context['text'], self.text_maxlen, truncation_strategy='front')
             return [prior_context]
+
+        if self.passage_mode == 'toprule+prior':
+            prior_context = contexts[16]
+            top_rule_context = contexts[0]
+            if not (top_rule_context['text'] and prior_context['text']):
+                return []
+            if self.model_type == 'codegen':
+                top_rule_len = int(self.text_maxlen/2) - 1 # whitespace
+            if self.model_type == 'santacoder':
+                top_rule_len = int(self.text_maxlen/2) - 3 # special tokens for FIM
+
+            top_rule_context_text, len_top_rule_context = self.truncate_rule_context(top_rule_context['text'], top_rule_len, truncation_strategy='back')
+            prior_context_len = self.text_maxlen - len_top_rule_context
+            prior_context_text, _ = self.truncate_rule_context(prior_context['text'], prior_context_len, truncation_strategy='front')
+
+            if self.model_type == 'codegen':
+                net_context_text = top_rule_context_text + " " + prior_context_text
+            if self.model_type == 'santacoder':
+                net_context_text = "<fim-prefix>" + prior_context_text + "<fim-suffix>" + top_rule_context_text + "<fim-middle>"
+
+            return [{'title': prior_context['title'], 'text': net_context_text, 'score': prior_context['score']}]
 
         if self.passage_mode == 'truncation-direct':
             return self.truncate_contexts(contexts[:self.n_context], question)
@@ -228,7 +249,9 @@ class Dataset(torch.utils.data.Dataset):
             return contexts_before_codex
 
     def get_formatted_passages_and_scores(self, contexts):
-        if (self.passage_mode == 'finetuned' and self.model_type == 'codet5') or (self.passage_mode == 'pretrained' and self.model_type == 'codegen'):
+        if (self.passage_mode == 'finetuned' and self.model_type == 'codet5') or \
+            (self.passage_mode == 'pretrained' and self.model_type == 'codegen') or \
+            (self.passage_mode == 'toprule+prior'):
             passages = [c['text'] for c in contexts]
         elif (self.passage_mode == 'pretrained' and self.model_type == 'codet5'):
             passages = [c['text'] + '<extra_id_0>' for c in contexts]
@@ -299,7 +322,7 @@ def encode_passages(batch_text_passages, tokenizer, max_length, model_type):
             passage_ids.append(p['input_ids'][None])
             passage_masks.append(p['attention_mask'][None])
 
-        if model_type == 'codegen':
+        if model_type == 'codegen' or model_type == 'santacoder':
             passage_ids.append(p['input_ids'])
             passage_masks.append(p['attention_mask'])
 
@@ -355,7 +378,7 @@ class Collator(object):
         
         text_passages = [append_question(example) for example in batch]
         # if index.item()==301:
-        #    print(f"passage: {text_passages[0]}, target: {string_target}, hole_id: {hole_id}, index: {index}")
+        # print(f"passage: {text_passages[0]}, target: {string_target}, hole_id: {hole_id}, index: {index}")
         passage_ids, passage_masks = encode_passages(batch_text_passages=text_passages,
                                                      tokenizer=self.tokenizer,
                                                      max_length=self.text_maxlength,

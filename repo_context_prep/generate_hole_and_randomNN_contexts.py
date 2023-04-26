@@ -111,7 +111,7 @@ if __name__ == '__main__':
                         file=file,
                         parse_data=parse_data,
                         emb_model=emb_model,
-                        device='cuda:0')
+                        device='cuda')
             # iterate over all the holes in the file
             for (l,c) in hole_data[file]: # l = line no, c = character offset within line l
                 hole_pos = (l, c)

@@ -50,9 +50,9 @@ def evaluate(model, dataset, collator, tokenizer, opt, stopping_criteria, logger
     with torch.no_grad():
         for i, batch in enumerate(dataloader):
             (idx, labels, _, context_ids, context_mask) = batch
-            count += (i + 1) * opt.per_gpu_batch_size
-            if count < start_idx:
-                continue
+            # count += (i + 1) * opt.per_gpu_batch_size
+            # if count < start_idx:
+            #     continue
             # print("context_ids", context_ids.shape)
             # print("context_mask", context_mask.shape)
             # print("labels", labels.shape)
@@ -66,20 +66,25 @@ def evaluate(model, dataset, collator, tokenizer, opt, stopping_criteria, logger
             if opt.model_type == 'codet5':
                 outputs = model.generate(input_ids=context_ids.cuda(),
                                 attention_mask=context_mask.cuda(),
-                                max_length=100) 
-                                #stopping_criteria=stopping_criteria)
+                                max_length=128)
+
+            if opt.model_type == 'santacoder':
+                outputs = model.generate(input_ids=context_ids.cuda(),
+                                attention_mask=context_mask.cuda(),
+                                max_length=opt.text_maxlength + 128)
+                starting_pos = context_ids.shape[1]
             
             elif opt.model_type == 'codegen':
                 outputs = model.generate(input_ids=context_ids.cuda(),
                                 attention_mask=context_mask.cuda(),
-                                max_length=opt.text_maxlength + 100)
+                                max_length=opt.text_maxlength + 128)
                 starting_pos = context_ids.shape[1]
 
             if opt.write_crossattention_scores:
                 crossattention_scores = model.get_crossattention_scores(context_mask.cuda())
 
             for k, o in enumerate(outputs):
-                if opt.model_type == 'codegen':
+                if opt.model_type == 'codegen' or opt.model_type == 'santacoder':
                     o = o[starting_pos:]
                 ans = tokenizer.decode(o, skip_special_tokens=True)
                 example = dataset.get_example(idx[k].item())
@@ -124,14 +129,15 @@ def run(opt):
     if opt.write_results:
         (output_path / 'test_results').mkdir(parents=True, exist_ok=True)
 
-    partial_result_file = os.path.join(output_path, 'test_results', '0.jsonl')
-    if os.path.exists(partial_result_file):
-        print('Partial result file exists, calculation point of start')
-        with open(partial_result_file, 'r') as f:
-            lines = f.readlines()
-            start_idx = len(lines)
-    else:
-        start_idx = 0
+    # partial_result_file = os.path.join(output_path, 'test_results', '0.jsonl')
+    # if os.path.exists(partial_result_file):
+    #     logger.info('Partial result file exists, calculating point of start')
+    #     with open(partial_result_file, 'r') as f:
+    #         lines = f.readlines()
+    #         start_idx = len(lines)
+    # else:
+    start_idx = 0
+    logger.info(f'Starting from index {start_idx}')
         
     logger = src.util.init_logger(
         opt.is_main,
@@ -151,6 +157,12 @@ def run(opt):
     if opt.model_type == 'codegen':
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         stop_ids = [50256, 198, 201]
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        tokenizer.padding_side = 'left'
+    if opt.model_type == 'santacoder':
+        tokenizer = AutoTokenizer.from_pretrained(opt.model_name)
+        stop_ids = [50256, 185, 188]
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = 'left'
@@ -182,6 +194,12 @@ def run(opt):
         print(model_name)
         model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16, pad_token_id=tokenizer.eos_token_id)
         logger.info(f"Model initialized from {model_name}")
+
+    if opt.model_type == 'santacoder':
+        print("Starting to load model") 
+        print(opt.model_name)
+        model = AutoModelForCausalLM.from_pretrained(opt.model_name, trust_remote_code=True, torch_dtype=torch.bfloat16, pad_token_id=tokenizer.eos_token_id)
+        logger.info(f"Model initialized from {opt.model_name}")
     model.to(opt.device)
 
     stopping_criteria = StoppingCriteriaList([src.util.StoppingCriteriaTokenIds(stop_ids=stop_ids, device=opt.device)])
