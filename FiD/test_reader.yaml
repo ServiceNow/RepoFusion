@@ -2,4 +2,4 @@ resources:
   cpu: 16 #8
   mem: 64 #120
   gpu: 1
-  gpuMem: 80
+  gpuMem: 32
