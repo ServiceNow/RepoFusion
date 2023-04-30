@@ -4,13 +4,13 @@ checkpoint_dir = os.path.join(base_data_dir, 'checkpoints')
 checkpoints = os.listdir(checkpoint_dir)
 
 other_checkpoints = [
-    'codet5base_768_32_linear_no-truncation-direct_True',
-    'codet5base_768_32_linear_no-truncation-codex-last_True'
+    # 'codet5base_768_32_linear_no-truncation-direct_True',
+    # 'codet5base_768_32_linear_no-truncation-codex-last_True'
 ]
 
 commands = []
 for checkpoint in checkpoints:
-    if checkpoint.startswith('mod_') or checkpoint in other_checkpoints:
+    #if checkpoint.startswith('mod_') or checkpoint in other_checkpoints:
         command = "./run.sh -f FiD/test_reader.py --per_gpu_batch_size=1 --dataset_path=/repo_data/repo_preprocessed_data --num_of_eval_examples_per_gpu=-1 " \
                 + "--eval_split_name=random_val "\
                 + "--output_dir=" + os.path.join(base_data_dir, "checkpoint_evaluations") + " "\

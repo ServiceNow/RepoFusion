@@ -50,9 +50,9 @@ def evaluate(model, dataset, collator, tokenizer, opt, stopping_criteria, logger
     with torch.no_grad():
         for i, batch in enumerate(dataloader):
             (idx, labels, _, context_ids, context_mask) = batch
-            # count += (i + 1) * opt.per_gpu_batch_size
-            # if count < start_idx:
-            #     continue
+            count += (i + 1) * opt.per_gpu_batch_size
+            if count < start_idx:
+                continue
             # print("context_ids", context_ids.shape)
             # print("context_mask", context_mask.shape)
             # print("labels", labels.shape)
@@ -135,14 +135,14 @@ def run(opt):
         output_path / 'run.log'
     )
     
-    # partial_result_file = os.path.join(output_path, 'test_results', '0.jsonl')
-    # if os.path.exists(partial_result_file):
-    #     logger.info('Partial result file exists, calculating point of start')
-    #     with open(partial_result_file, 'r') as f:
-    #         lines = f.readlines()
-    #         start_idx = len(lines)
-    # else:
-    start_idx = 0
+    partial_result_file = os.path.join(output_path, 'test_results', '0.jsonl')
+    if os.path.exists(partial_result_file):
+        logger.info('Partial result file exists, calculating point of start')
+        with open(partial_result_file, 'r') as f:
+            lines = f.readlines()
+            start_idx = len(lines)
+    else:
+        start_idx = 0
     logger.info(f'Starting from index {start_idx}')
 
     model_name = opt.model_name + '-' +opt.model_size
@@ -160,6 +160,7 @@ def run(opt):
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = 'left'
+
     if opt.model_type == 'santacoder':
         tokenizer = AutoTokenizer.from_pretrained(opt.model_name)
         stop_ids = [50256, 185, 188]
@@ -204,16 +205,18 @@ def run(opt):
 
     stopping_criteria = StoppingCriteriaList([src.util.StoppingCriteriaTokenIds(stop_ids=stop_ids, device=opt.device)])
 
-    if opt.passage_mode == 'pretrained' or opt.passage_mode == 'finetuned':
+    if opt.passage_mode == 'pretrained' or opt.passage_mode == 'finetuned' or opt.passage_mode == 'toprule+prior':
         is_append_question = False
     else:
         is_append_question = opt.is_append_question
+    logger.info(f"Appending question: {is_append_question}")
 
     collator = src.data.Collator(text_maxlength=opt.text_maxlength, \
                                     tokenizer=tokenizer, \
                                     answer_maxlength=opt.answer_maxlength,
                                     is_append_question=is_append_question,
-                                    model_type=opt.model_type)
+                                    model_type=opt.model_type,
+                                    passage_mode=opt.passage_mode)
 
 
     # NOTE: either specify eval_data to load with custom implementation or 

@@ -331,12 +331,13 @@ def encode_passages(batch_text_passages, tokenizer, max_length, model_type):
     return passage_ids, passage_masks.bool()
 
 class Collator(object):
-    def __init__(self, text_maxlength, tokenizer, answer_maxlength=20, is_append_question=True, model_type='codet5'):
+    def __init__(self, text_maxlength, tokenizer, answer_maxlength=20, is_append_question=True, model_type='codet5', passage_mode='toprule+prior'):
         self.tokenizer = tokenizer
         self.text_maxlength = text_maxlength
         self.answer_maxlength = answer_maxlength
         self.is_append_question = is_append_question
         self.model_type = model_type
+        self.passage_mode = passage_mode
 
     def truncate_from_left(self, text):
         tokens = self.tokenizer(text, truncation=False).input_ids
@@ -373,7 +374,10 @@ class Collator(object):
                     appended_passages.append(t + " " + example['question'])
             else:
                 appended_passages = example['passages']
-            appended_and_truncated_passages = [self.truncate_from_left(p) for p in appended_passages]
+            if (self.passage_mode == 'pretrained' and self.model_type == 'codet5') or self.model_type == 'santacoder':
+                appended_and_truncated_passages = appended_passages
+            else:
+                appended_and_truncated_passages = [self.truncate_from_left(p) for p in appended_passages]
             return appended_and_truncated_passages
         
         text_passages = [append_question(example) for example in batch]
@@ -483,3 +487,84 @@ class TextCollator(object):
 
         return index, text_ids, text_mask
     
+class ChatGPTDataset(torch.utils.data.Dataset):
+    def __init__(self,
+                 data_path,
+                 num_of_examples=-1,
+                 passage_mode='pretrained',
+                 model_type='chatgpt',
+                 text_maxlen=4096,
+                 tokenizer=None):
+
+        examples = []
+        # each example is a json object that consists of data for a single hole. We load the json object later for efficiency.
+        for dp, dn, filenames in os.walk(data_path):
+            for f in filenames:
+                if f == 'hole_and_rule_contexts.json':
+                    data_path = os.path.join(dp, f)
+                    #print('Loading data from {}'.format(data_path))
+                    lines = open(data_path, 'r').readlines()
+                    for i, line in enumerate(lines):
+                        examples.append(line.strip())
+
+        # if num_of_examples is specified, we only load the first num_of_examples examples.
+        if num_of_examples > 0:
+            examples = examples[:num_of_examples]
+        self.examples = examples
+        self.passage_mode = passage_mode
+        self.model_type = model_type
+        self.text_maxlen = text_maxlen
+        self.tokenizer = tokenizer
+
+    def __len__(self):
+        return len(self.examples)
+
+    def truncate_rule_context(self, text, max_length, truncation_strategy='back'):
+        text_tokens = self.tokenizer(text).input_ids
+        if len(text_tokens) > max_length:
+            if truncation_strategy == 'front':
+                # take the last max_length tokens.
+                text_tokens = text_tokens[-max_length:]
+            else:
+                # truncate the first max_length tokens.
+                text_tokens = text_tokens[:max_length]
+        return self.tokenizer.decode(text_tokens, skip_special_tokens=True), len(text_tokens)
+
+    def __getitem__(self, index):
+        example = self.examples[index]
+        example = json.loads(example)
+        target = example['target']
+        target, _ = self.truncate_rule_context(target, self.text_maxlen, truncation_strategy='back')
+
+        if self.passage_mode == 'pretrained':
+            prior_context = example['ctxs'][16]['text']
+            if not prior_context:
+                prompt = ''
+            else:
+                prompt, len_prompt = self.truncate_rule_context(prior_context, self.text_maxlen, truncation_strategy='front')
+            #print(len_prompt)
+
+        if self.passage_mode == 'toprule+prior':
+            prior_context = example['ctxs'][16]['text']
+            top_rule_context = example['ctxs'][0]['text']
+            if not (top_rule_context and prior_context):
+                prompt = ''
+            else:
+                if self.model_type == 'chatgpt':
+                    top_rule_len = int(self.text_maxlen/2) - 1 # whitespace
+                if self.model_type == 'starcoder':
+                    top_rule_len = int(self.text_maxlen/2) - 3 # special tokens for FIM
+
+                top_rule_context_text, len_top_rule_context = self.truncate_rule_context(top_rule_context, top_rule_len, truncation_strategy='back')
+                prior_context_len = self.text_maxlen - len_top_rule_context
+                prior_context_text, _ = self.truncate_rule_context(prior_context, prior_context_len, truncation_strategy='front')
+
+                if self.model_type == 'chatgpt':
+                    prompt = top_rule_context_text + " " + prior_context_text
+                if self.model_type == 'starcoder':
+                    prompt = "<fim_prefix>" + prior_context_text + "<fim_suffix>" + top_rule_context_text + "<fim_middle>"
+        # print("prompt: ", prompt)
+        # print("target last: ", target)
+        # print("example id: ", example['id'])
+        # print("index: ", index)
+        return index, target, example['id'], prompt
