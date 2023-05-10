@@ -164,7 +164,7 @@ class Dataset(torch.utils.data.Dataset):
             top_rule_context = contexts[0]
             if not (top_rule_context['text'] and prior_context['text']):
                 return []
-            if self.model_type == 'codegen':
+            if self.model_type == 'codegen' or self.model_type == 'codet5':
                 top_rule_len = int(self.text_maxlen/2) - 1 # whitespace
             if self.model_type == 'santacoder':
                 top_rule_len = int(self.text_maxlen/2) - 3 # special tokens for FIM
@@ -173,7 +173,7 @@ class Dataset(torch.utils.data.Dataset):
             prior_context_len = self.text_maxlen - len_top_rule_context
             prior_context_text, _ = self.truncate_rule_context(prior_context['text'], prior_context_len, truncation_strategy='front')
 
-            if self.model_type == 'codegen':
+            if self.model_type == 'codegen' or self.model_type == 'codet5':
                 net_context_text = top_rule_context_text + " " + prior_context_text
             if self.model_type == 'santacoder':
                 net_context_text = "<fim-prefix>" + prior_context_text + "<fim-suffix>" + top_rule_context_text + "<fim-middle>"
@@ -204,7 +204,10 @@ class Dataset(torch.utils.data.Dataset):
                 if context['text']:
                     tokens = self.tokenizer(context['text']).input_ids
                     rule_context_len, _ = self.get_rule_context_length(question, context['title'])
-                    parts = list(self.divide_chunks(tokens, rule_context_len))
+                    if rule_context_len > 0:
+                        parts = list(self.divide_chunks(tokens, rule_context_len))
+                    else:
+                        parts = []
                     for part in parts:
                         if len(part) > 0:
                             modified_contexts.append({'title': context['title'], \
@@ -218,7 +221,10 @@ class Dataset(torch.utils.data.Dataset):
             if codex_context['text']:
                 codex_tokens = self.tokenizer(codex_context['text']).input_ids
                 rule_context_len, _ = self.get_rule_context_length(question, codex_context['title'])
-                codex_parts = list(self.divide_chunks(codex_tokens, rule_context_len))
+                if rule_context_len > 0:
+                    codex_parts = list(self.divide_chunks(codex_tokens, rule_context_len))
+                else:
+                    codex_parts = []
             else:
                 codex_parts = []
 
@@ -227,7 +233,10 @@ class Dataset(torch.utils.data.Dataset):
                     # Think how to do formatting here.
                     tokens = self.tokenizer(context['text']).input_ids
                     rule_context_len, _ = self.get_rule_context_length(question, context['title'])
-                    parts = list(self.divide_chunks(tokens, rule_context_len))              
+                    if rule_context_len > 0:
+                        parts = list(self.divide_chunks(tokens, rule_context_len))
+                    else:
+                        parts = []              
                     for part in parts:
                         if len(part) > 0:
                             modified_contexts.append({'title': context['title'], \
@@ -557,8 +566,8 @@ class ChatGPTDataset(torch.utils.data.Dataset):
 
                 top_rule_context_text, len_top_rule_context = self.truncate_rule_context(top_rule_context, top_rule_len, truncation_strategy='back')
                 prior_context_len = self.text_maxlen - len_top_rule_context
-                prior_context_text, _ = self.truncate_rule_context(prior_context, prior_context_len, truncation_strategy='front')
-
+                prior_context_text, final_prior_context_len = self.truncate_rule_context(prior_context, prior_context_len, truncation_strategy='front')
+                #print(self.text_maxlen, top_rule_len, len_top_rule_context, prior_context_len, final_prior_context_len)
                 if self.model_type == 'chatgpt':
                     prompt = top_rule_context_text + " " + prior_context_text
                 if self.model_type == 'starcoder':
@@ -568,3 +577,52 @@ class ChatGPTDataset(torch.utils.data.Dataset):
         # print("example id: ", example['id'])
         # print("index: ", index)
         return index, target, example['id'], prompt
+
+
+class HoleContextDataset(torch.utils.data.Dataset):
+    def __init__(self,
+                 data_path,
+                 num_of_examples=-1,
+                 tokenizer=None):
+
+        examples = []
+        # each example is a json object that consists of data for a single hole. We load the json object later for efficiency.
+        for dp, dn, filenames in os.walk(data_path):
+            for f in filenames:
+                if f == 'hole_and_rule_contexts.json':
+                    data_path = os.path.join(dp, f)
+                    #print('Loading data from {}'.format(data_path))
+                    lines = open(data_path, 'r').readlines()
+                    for i, line in enumerate(lines):
+                        examples.append(line.strip())
+
+        # if num_of_examples is specified, we only load the first num_of_examples examples.
+        if num_of_examples > 0:
+            examples = examples[:num_of_examples]
+        self.examples = examples
+        self.tokenizer = tokenizer
+
+    def __len__(self):
+        return len(self.examples)
+
+    def __getitem__(self, index):
+        example = self.examples[index]
+        example = json.loads(example)
+        hole_context = example['question']
+        hole_id = example['id']
+        return hole_context, hole_id
+
+class HoleContextCollator(object):
+    def __init__(self, tokenizer, maxlength=512):
+        self.tokenizer = tokenizer
+        self.maxlength = maxlength
+        
+    def __call__(self, batch):
+        hole_context_texts = [x[0] for x in batch]
+        hole_id = [x[1] for x in batch]
+        hole_context = self.tokenizer(hole_context_texts, \
+                                        padding='max_length',
+                                        return_tensors="pt",
+                                        max_length=self.maxlength,
+                                        truncation=True)
+        return hole_context["input_ids"], hole_context["attention_mask"], hole_id

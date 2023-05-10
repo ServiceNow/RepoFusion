@@ -1,0 +1,37 @@
+# effect of passage modes
+512_63_no-truncation-codex-last: 7473/10000, EM=74.73, Unique Holes=10000
+512_63_no-truncation-direct: 7466/10000, EM=74.66, Unique Holes=10000
+512_63_truncation-random: 7192/10000, EM=71.92, Unique Holes=10000
+512_63_truncation-direct: 7192/10000, EM=71.92, Unique Holes=10000
+512_63_truncation-codex-last: 7192/10000, EM=71.92, Unique Holes=10000
+
+768_32_no-truncation-codex-last: 7482/10000, EM=74.82, Unique Holes=10000
+768_32_no-truncation-direct: 7360/10000, EM=73.6, Unique Holes=10000
+768_32_truncation-direct: 7278/10000, EM=72.78, Unique Holes=10000
+768_32_truncation-random: 6653/10000, EM=66.53, Unique Holes=10000
+768_32_truncation-codex-last: 7278/10000, EM=72.78, Unique Holes=10000
+
+# effect of type of context
+512_63_no-truncation-direct: 7466/10000, EM=74.66, Unique Holes=10000
+512_63_truncation-direct: 7192/10000, EM=71.92, Unique Holes=10000
+FiD_bm25_model_512_63_no-truncation-direct: 6419/10000, EM=64.19, Unique Holes=10000
+FiD_bm25_model_512_63_truncation-direct: 5298/10000, EM=52.98, Unique Holes=10000
+FiD_randomNN_model_512_63_no-truncation-direct: 5033/10000, EM=50.33, Unique Holes=10000
+FiD_randomNN_model_512_63_truncation-direct: 5030/10000, EM=50.3, Unique Holes=10000
+
+#effect of context length
+1024_16_no-truncation-codex-last: 7399/10000, EM=73.99, Unique Holes=10000
+
+#effect of #contexts                                    
+512_32_no-truncation-codex-last: 7372/10000, EM=73.72, Unique Holes=10000
+512_63_no-truncation-codex-last: 7473/10000, EM=74.73, Unique Holes=10000
+
+
+# effect of not appending hole context
+FiD_final_model_768_32_no_append_question_no-truncation-codex-last: 1718/10000, EM=17.18, Unique Holes=10000
+FiD_final_model_768_32_no_append_question_no-truncation-direct: 1557/10000, EM=15.57, Unique Holes=10000
+FiD_final_model_768_32_no_append_question_truncation-random: 1389/10000, EM=13.89, Unique Holes=10000
+FiD_final_model_768_32_no_append_question_truncation-direct: 2506/10000, EM=25.06, Unique Holes=10000
+FiD_final_model_768_32_no_append_question_truncation-codex-last: 2506/10000, EM=25.06, Unique Holes=10000
+
+#effect of initialization

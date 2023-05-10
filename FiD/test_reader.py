@@ -120,7 +120,7 @@ def run(opt):
     src.slurm.init_distributed_mode(opt)
     src.slurm.init_signal_handler()
 
-    experiment_name = opt.name + '_' + opt.passage_mode + '_' + str(opt.is_append_question)
+    experiment_name = opt.name + '_' + opt.passage_mode #+ '_' + str(opt.is_append_question)
     output_path = Path(opt.output_dir)/experiment_name
     if opt.is_distributed:
         torch.distributed.barrier()
@@ -170,6 +170,13 @@ def run(opt):
         
     # Set the model.
     if opt.model_type == 'codet5': 
+        # finetuned model
+        if opt.passage_mode =='finetuned' or opt.passage_mode == 'toprule+prior':
+            t5 = transformers.T5ForConditionalGeneration.from_pretrained(opt.trained_model_path)
+            model = src.model.FiDT5(t5.config)
+            model.load_t5(t5.state_dict())
+            logger.info(f"Model initialized from {opt.trained_model_path}")
+            
         # pretrained       
         if opt.trained_model_path is None:
             t5 = transformers.T5ForConditionalGeneration.from_pretrained(model_name)
@@ -177,18 +184,13 @@ def run(opt):
             model.load_t5(t5.state_dict())
             logger.info(f"Model initialized from {model_name}")
         else:
-            load_path = Path(opt.trained_model_path) / 'checkpoint' / opt.trained_model_load_type
+            #load_path = Path(opt.trained_model_path) / 'checkpoint' / opt.trained_model_load_type
+            load_path = Path(opt.trained_model_path)
             # FiD model
             if load_path.exists():
                 model_class = src.model.FiDT5
                 model = model_class.from_pretrained(load_path)
                 logger.info(f"Model initialized from {load_path}")
-            # finetuned model
-            else:
-                t5 = transformers.T5ForConditionalGeneration.from_pretrained(opt.trained_model_path)
-                model = src.model.FiDT5(t5.config)
-                model.load_t5(t5.state_dict())
-                logger.info(f"Model initialized from {opt.trained_model_path}")
 
     if opt.model_type == 'codegen':
         print("Starting to load model") 

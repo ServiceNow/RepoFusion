@@ -55,9 +55,9 @@ def evaluate(dataset, tokenizer, opt, logger, output_path, start_idx=0, client=N
         hole_id = hole_id[0]
         prompt = prompt[0]
         #print('gold:{}, hole_id:{}, prompt:{}'.format(gold, hole_id, prompt))
-        # count += (i + 1) * opt.per_gpu_batch_size
-        # if count < start_idx:
-        #     continue
+        count += (i + 1) * opt.per_gpu_batch_size
+        if count < start_idx:
+            continue
 
         if opt.model_type == 'chatgpt':
             response = generate_prediction(prompt)
@@ -69,7 +69,19 @@ def evaluate(dataset, tokenizer, opt, logger, output_path, start_idx=0, client=N
                 ans = response.choices[0].message.content
 
         if opt.model_type == 'starcoder':
-            ans = client.generate(prompt, max_new_tokens=128).generated_text
+            if prompt:
+                try:
+                    ans = client.generate(prompt, max_new_tokens=128).generated_text
+                except:
+                    import subprocess
+                    # Execute the command and capture its output
+                    result = subprocess.run(['eai', 'login', 'token'], stdout=subprocess.PIPE)
+                    # Get the output as a string
+                    access_token = result.stdout.decode('utf-8').strip()
+                    client = Client("https://snow-llmd-snow_dzmitry_llmd_bigcode_job.job.console.elementai.com", \
+                                    headers={"Authorization": "Bearer " + access_token})
+                    ans = client.generate(prompt, max_new_tokens=128).generated_text
+
 
         score = src.evaluation.em_code(ans, gold)
         #print('ans:{}, gold:{}, score:{}'.format(ans, gold, score))
@@ -113,24 +125,28 @@ def run(opt):
         output_path / 'run.log'
     )
     
-    # partial_result_file = os.path.join(output_path, 'test_results', '0.jsonl')
-    # if os.path.exists(partial_result_file):
-    #     logger.info('Partial result file exists, calculating point of start')
-    #     with open(partial_result_file, 'r') as f:
-    #         lines = f.readlines()
-    #         start_idx = len(lines)
-    # else:
-    start_idx = 0
+    partial_result_file = os.path.join(output_path, 'test_results', '0.jsonl')
+    if os.path.exists(partial_result_file):
+        logger.info('Partial result file exists, calculating point of start')
+        with open(partial_result_file, 'r') as f:
+            lines = f.readlines()
+            start_idx = len(lines)
+    else:
+        start_idx = 0
     logger.info(f'Starting from index {start_idx}')
 
     if opt.model_type == 'starcoder':
-        access_token = "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"
-        tokenizer = AutoTokenizer.from_pretrained("bigcode/large-model", use_auth_token=access_token)
+        hf_access_token = "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"
+        tokenizer = AutoTokenizer.from_pretrained("bigcode/large-model", use_auth_token=hf_access_token)
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = 'left'
+        # ACCESS_KEY = "yhAb0IDJytoBLCmfT3KRUw"
+        # SECRET_KEY="TZdqb575p-WNLXu_b-DMNrjKoMVkcsMeL9DS7WQKgmw"
+        # CLIENT="2c168ebb-3514-4c3b-bb8d-19fcbe0c1ffa"
+        # EAI_LOGIN_KEY= ACCESS_KEY:SECRET_KEY
         client = Client("https://snow-llmd-snow_dzmitry_llmd_bigcode_job.job.console.elementai.com", \
-                     headers={"Authorization": "Bearer MXdEynxiBoSn2nCejb4YMcYl-I9Mr99np_8LsH1o0F8.u_uIz2VmqDy6Ow-KU00kkBtNAIhWWB9K39KrVUgbB6U"})
+                     headers={"Authorization": "Bearer d4tVI9A5b0sYTEYLPL0yQcyMkkS81JJ2G4cmaHJkgro.RpYEN8Yeb0bcyfJ84bspg82JYaxhEKf6_zd8sACzZUM"})
 
     if opt.model_type == 'chatgpt':
         os.environ["OPENAI_API_KEY"] = open('/home/toolkit/repo_training_codellm/openai_api_key', 'r').read().strip()
