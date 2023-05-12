@@ -23,7 +23,8 @@ import src.data
 import src.evaluation
 import src.model
 
-def evaluate(model, dataset, collator, tokenizer, opt, stopping_criteria, logger, output_path, start_idx=0):
+def evaluate(model, dataset, collator, tokenizer, opt, stopping_criteria, logger, output_path, start_idx=0,
+            holes_processed_till_now=[]):
     # sample sequentially for evaluation.
     sampler = SequentialSampler(dataset)
     dataloader = DataLoader(dataset,
@@ -47,66 +48,72 @@ def evaluate(model, dataset, collator, tokenizer, opt, stopping_criteria, logger
     total = 0
     exactmatch = []
     count = 0
+    print("start_idx", start_idx)
     with torch.no_grad():
         for i, batch in enumerate(dataloader):
-            (idx, labels, _, context_ids, context_mask) = batch
-            count += (i + 1) * opt.per_gpu_batch_size
-            if count < start_idx:
-                continue
+            (idx, labels, _, context_ids, context_mask, hole_id) = batch
+            flag = False
+            for h_id in hole_id:
+                if h_id not in holes_processed_till_now:
+                    flag = True
+                    break
             # print("context_ids", context_ids.shape)
             # print("context_mask", context_mask.shape)
             # print("labels", labels.shape)
             # print("idx", idx)
-            if context_ids.size(1) == 0:
-                raise ValueError("The context_ids tensor is empty along dimension 1. Id is {}".format(idx.item()))
+            if flag:
+                #print(i, hole_id, flag)
+                if context_ids.size(1) == 0:
+                    raise ValueError("The context_ids tensor is empty along dimension 1. Id is {}".format(idx.item()))
 
-            if opt.write_crossattention_scores:
-                model.reset_score_storage()
-            
-            if opt.model_type == 'codet5':
-                outputs = model.generate(input_ids=context_ids.cuda(),
-                                attention_mask=context_mask.cuda(),
-                                max_length=128)
-
-            if opt.model_type == 'santacoder':
-                outputs = model.generate(input_ids=context_ids.cuda(),
-                                attention_mask=context_mask.cuda(),
-                                max_length=opt.text_maxlength + 128)
-                starting_pos = context_ids.shape[1]
-            
-            elif opt.model_type == 'codegen':
-                outputs = model.generate(input_ids=context_ids.cuda(),
-                                attention_mask=context_mask.cuda(),
-                                max_length=opt.text_maxlength + 128)
-                starting_pos = context_ids.shape[1]
-
-            if opt.write_crossattention_scores:
-                crossattention_scores = model.get_crossattention_scores(context_mask.cuda())
-
-            for k, o in enumerate(outputs):
-                if opt.model_type == 'codegen' or opt.model_type == 'santacoder':
-                    o = o[starting_pos:]
-                ans = tokenizer.decode(o, skip_special_tokens=True)
-                example = dataset.get_example(idx[k].item())
-                gold = example['target']
-                score = src.evaluation.em_code(ans, gold)
-                #print('ans:{}, gold:{}, score:{}'.format(ans, gold, score))
-                exactmatch.append(score)       
-                if opt.write_results:
-                    entry = {"id": example['id'], "prediction": ans, "target": example['target']}
-                    fw.write(json.dumps(entry) + '\n')
                 if opt.write_crossattention_scores:
-                    for j in range(context_ids.size(1)):
-                        example['ctxs'][j]['score'] = crossattention_scores[k, j].item()
-                total += 1
+                    model.reset_score_storage()
+                
+                if opt.model_type == 'codet5':
+                    outputs = model.generate(input_ids=context_ids.cuda(),
+                                    attention_mask=context_mask.cuda(),
+                                    max_length=128)
 
-            if (i + 1) % opt.eval_print_freq == 0:
-                log = f'Process rank:{opt.global_rank}, {i+1} / {len(dataloader)}'
-                if len(exactmatch) == 0:
-                    log += '| no answer to compute scores'
-                else:
-                    log += f' | average = {np.mean(exactmatch):.3f}'
-                logger.warning(log)
+                if opt.model_type == 'santacoder':
+                    outputs = model.generate(input_ids=context_ids.cuda(),
+                                    attention_mask=context_mask.cuda(),
+                                    max_length=opt.text_maxlength + 128)
+                    starting_pos = context_ids.shape[1]
+                
+                elif opt.model_type == 'codegen':
+                    outputs = model.generate(input_ids=context_ids.cuda(),
+                                    attention_mask=context_mask.cuda(),
+                                    max_length=opt.text_maxlength + 128)
+                    starting_pos = context_ids.shape[1]
+
+                if opt.write_crossattention_scores:
+                    crossattention_scores = model.get_crossattention_scores(context_mask.cuda())
+
+                for k, o in enumerate(outputs):
+                    if opt.model_type == 'codegen' or opt.model_type == 'santacoder':
+                        o = o[starting_pos:]
+                    ans = tokenizer.decode(o, skip_special_tokens=True)
+                    example = dataset.get_example(idx[k].item())
+                    gold = example['target']
+                    score = src.evaluation.em_code(ans, gold)
+                    #print('ans:{}, gold:{}, score:{}'.format(ans, gold, score))
+                    exactmatch.append(score)       
+                    if opt.write_results:
+                        entry = {"id": example['id'], "prediction": ans, "target": example['target']}
+                        fw.write(json.dumps(entry) + '\n')
+                        fw.flush()
+                    if opt.write_crossattention_scores:
+                        for j in range(context_ids.size(1)):
+                            example['ctxs'][j]['score'] = crossattention_scores[k, j].item()
+                    total += 1
+
+                if (i + 1) % opt.eval_print_freq == 0:
+                    log = f'Process rank:{opt.global_rank}, {i+1} / {len(dataloader)}'
+                    if len(exactmatch) == 0:
+                        log += '| no answer to compute scores'
+                    else:
+                        log += f' | average = {np.mean(exactmatch):.3f}'
+                    logger.warning(log)
 
     logger.warning(f'Process rank:{opt.global_rank}, total {total} | average = {np.mean(exactmatch):.3f}')
     if opt.is_distributed:
@@ -138,11 +145,21 @@ def run(opt):
     partial_result_file = os.path.join(output_path, 'test_results', '0.jsonl')
     if os.path.exists(partial_result_file):
         logger.info('Partial result file exists, calculating point of start')
+        hole_count = {}
         with open(partial_result_file, 'r') as f:
             lines = f.readlines()
-            start_idx = len(lines)
+            for line in lines:
+                entry = json.loads(line)
+                hole_id = entry['id']
+                if hole_id in hole_count:
+                    hole_count[hole_id] += 1
+                else:
+                    hole_count[hole_id] = 1
+            start_idx = len(hole_count)
+            holes_processed_till_now = list(hole_count.keys())
     else:
         start_idx = 0
+        holes_processed_till_now = []
     logger.info(f'Starting from index {start_idx}')
 
     model_name = opt.model_name + '-' +opt.model_size
@@ -170,27 +187,27 @@ def run(opt):
         
     # Set the model.
     if opt.model_type == 'codet5': 
-        # finetuned model
-        if opt.passage_mode =='finetuned' or opt.passage_mode == 'toprule+prior':
-            t5 = transformers.T5ForConditionalGeneration.from_pretrained(opt.trained_model_path)
-            model = src.model.FiDT5(t5.config)
-            model.load_t5(t5.state_dict())
-            logger.info(f"Model initialized from {opt.trained_model_path}")
-            
         # pretrained       
         if opt.trained_model_path is None:
             t5 = transformers.T5ForConditionalGeneration.from_pretrained(model_name)
             model = src.model.FiDT5(t5.config)
             model.load_t5(t5.state_dict())
-            logger.info(f"Model initialized from {model_name}")
+            logger.info(f"Model initialized from pretrained path: {model_name}")
         else:
             #load_path = Path(opt.trained_model_path) / 'checkpoint' / opt.trained_model_load_type
             load_path = Path(opt.trained_model_path)
             # FiD model
-            if load_path.exists():
+            print(opt.passage_mode)
+            if load_path.exists() and not (opt.passage_mode == 'finetuned' or opt.passage_mode == 'toprule+prior'):
                 model_class = src.model.FiDT5
                 model = model_class.from_pretrained(load_path)
-                logger.info(f"Model initialized from {load_path}")
+                logger.info(f"Model initialized from FiD path: {load_path}")
+            # finetuned model
+            else:
+                t5 = transformers.T5ForConditionalGeneration.from_pretrained(opt.trained_model_path)
+                model = src.model.FiDT5(t5.config)
+                model.load_t5(t5.state_dict())
+                logger.info(f"Model initialized from finetuned path: {opt.trained_model_path}")
 
     if opt.model_type == 'codegen':
         print("Starting to load model") 
@@ -235,7 +252,7 @@ def run(opt):
                                         passage_mode=opt.passage_mode, \
                                         is_append_question=opt.is_append_question, \
                                         text_maxlen=opt.text_maxlength, \
-                                        num_of_examples=opt.num_of_eval_examples_per_gpu, 
+                                        num_of_examples=opt.num_of_eval_examples_per_gpu, \
                                         model_type=opt.model_type)
         logger.info(f'Loaded {len(eval_dataset)} validation examples from {opt.eval_data}')
     else:
@@ -268,7 +285,8 @@ def run(opt):
                                 stopping_criteria, 
                                 logger,
                                 output_path,
-                                start_idx)
+                                start_idx,
+                                holes_processed_till_now)
 
     logger.info(f'EM {100*exactmatch:.2f}, Total number of example {total}')
 

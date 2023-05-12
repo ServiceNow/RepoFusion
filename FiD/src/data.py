@@ -396,7 +396,7 @@ class Collator(object):
                                                      tokenizer=self.tokenizer,
                                                      max_length=self.text_maxlength,
                                                      model_type=self.model_type)
-        return (index, target_ids, target_mask, passage_ids, passage_masks)
+        return (index, target_ids, target_mask, passage_ids, passage_masks, hole_id)
 
 # def load_data(data_path=None, global_rank=-1, world_size=-1):
 #     assert data_path
