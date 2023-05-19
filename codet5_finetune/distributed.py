@@ -1,19 +1,20 @@
 import torch
 import os
 
+
 def set_distributed_options(opt):
     # adapted from FiD distributed options setting
     # multi gpu options
-    if 'LOCAL_RANK' in os.environ:
-        opt.local_rank = int(os.environ['LOCAL_RANK'])
+    if "LOCAL_RANK" in os.environ:
+        opt.local_rank = int(os.environ["LOCAL_RANK"])
         has_local_rank = True
     else:
         has_local_rank = False
-    
+
     if has_local_rank and opt.local_rank != -1:
-        opt.global_rank = int(os.environ['RANK'])
-        opt.world_size = int(os.environ['WORLD_SIZE'])
-        opt.n_gpu_per_node = int(os.environ['LOCAL_WORLD_SIZE'])
+        opt.global_rank = int(os.environ["RANK"])
+        opt.world_size = int(os.environ["WORLD_SIZE"])
+        opt.n_gpu_per_node = int(os.environ["LOCAL_WORLD_SIZE"])
 
         # number of nodes / node ID
         opt.n_nodes = opt.world_size // opt.n_gpu_per_node

@@ -4,31 +4,32 @@ import transformers
 import datasets
 
 from transformers import BatchEncoding
-from transformers import StoppingCriteria 
+from transformers import StoppingCriteria
 
 
 class StoppingCriteriaTokenIds(StoppingCriteria):
-    def __init__(self, stop_ids, device='cuda'):
+    def __init__(self, stop_ids, device="cuda"):
         super().__init__()
         self.stop_ids = torch.tensor(stop_ids).to(device)
 
     def __call__(self, input_ids, scores, *kwargs):
         # true if any alement is one of the stop ids in all rows
-        return torch.all(torch.any(
-            torch.isin(input_ids, self.stop_ids),
-            dim=1,
-            keepdim=False
-        )).item()
+        return torch.all(
+            torch.any(torch.isin(input_ids, self.stop_ids), dim=1, keepdim=False)
+        ).item()
 
-class DataCollatorNTP():
+
+class DataCollatorNTP:
     def __init__(
         self,
         ds_data,
         tokenizer,
-        min_encoder_seq_length, min_decoder_seq_length,
-        encoder_seq_length, decoder_seq_length,
+        min_encoder_seq_length,
+        min_decoder_seq_length,
+        encoder_seq_length,
+        decoder_seq_length,
         append_special_token_to_input=None,
-        add_max_padding=False
+        add_max_padding=False,
     ):
         self.ds_data = ds_data
         self.tokenizer = tokenizer
@@ -38,11 +39,11 @@ class DataCollatorNTP():
         self.decoder_seq_length = decoder_seq_length
         self.append_special_token_to_input = append_special_token_to_input
         self.add_max_padding = add_max_padding
-        
+
     def __call__(self, examples, return_tensors="pt"):
         """
         NOTE: the doc is from a standard codet5, where are changnes in the code
-        
+
         This collate function is to be used with the CodeT5 model, which is a
         T5 model with a different tokenizer than the original T5 model.
         The tokenization is already done at this point and the examples are a list of
@@ -99,28 +100,55 @@ class DataCollatorNTP():
 
         encoder_seq_length = self.encoder_seq_length
         decoder_seq_length = self.decoder_seq_length
-        
-        if 'target' in examples[0]:
+
+        do_labels_decoder_input = True
+
+        if "target" in examples[0]:
+            do_labels_decoder_input = False
             # format of data aready split by pivot point on str level
             encoder_ids_and_masks = self.tokenizer(
-                [el['prior_context'] for el in examples],
-                add_special_tokens=False
+                [el["prior_context"] for el in examples], add_special_tokens=False
             )
-            encoder_examples_ids = [[bos_token_id]+el for el in encoder_ids_and_masks['input_ids']]
-            encoder_attention_mask = [[1]+el for el in encoder_ids_and_masks['attention_mask']]
-            
-            label_ids = [el+[eos_token_id] for el in self.tokenizer(
-                    [el['target'] for el in examples],
-                    add_special_tokens=False,
-                    return_attention_mask=False
-                )['input_ids'] 
+            encoder_examples_ids = [
+                [bos_token_id] + el for el in encoder_ids_and_masks["input_ids"]
             ]
+            encoder_attention_mask = [
+                [1] + el for el in encoder_ids_and_masks["attention_mask"]
+            ]
+
+            label_ids = [
+                el + [eos_token_id]
+                for el in self.tokenizer(
+                    [el["target"] for el in examples],
+                    add_special_tokens=False,
+                    return_attention_mask=False,
+                )["input_ids"]
+            ]
+            hole_id_ids = [
+                el
+                for el in self.tokenizer(
+                    [el["id"] for el in examples],
+                    add_special_tokens=False,
+                    return_attention_mask=False,
+                )["input_ids"]
+            ]
+            label_ids = [[len(l) + 1] + l + s for l, s in zip(label_ids, hole_id_ids)]
+            max_label_length = max(len(label_seq) for label_seq in label_ids)
+            label_ids_pt = torch.tensor(
+                [
+                    label_seq + [-100] * (max_label_length - len(label_seq))
+                    for label_seq in label_ids
+                ]
+            )
         else:
             # format of pivot points dataset and data separatelly in ds_data
-            examples_ids_and_masks = self.tokenizer([
-                self.ds_data[example['split']][example['data_idx']]['content'] for example in examples
-            ])
-            pivotpoints = [example['pivot'] for example in examples]
+            examples_ids_and_masks = self.tokenizer(
+                [
+                    self.ds_data[example["split"]][example["data_idx"]]["content"]
+                    for example in examples
+                ]
+            )
+            pivotpoints = [example["pivot"] for example in examples]
 
             # either take pre-selected pivot point if exist
             # or randomly select a pivotpoint for each example
@@ -131,25 +159,31 @@ class DataCollatorNTP():
             pivotpoints = [
                 random.randint(
                     self.min_encoder_seq_length,
-                    len(input_ids)-self.min_decoder_seq_length
-                ) if pivot is None else pivot
-                for input_ids, pivot in zip(examples_ids_and_masks['input_ids'], pivotpoints)
+                    len(input_ids) - self.min_decoder_seq_length,
+                )
+                if pivot is None
+                else pivot
+                for input_ids, pivot in zip(
+                    examples_ids_and_masks["input_ids"], pivotpoints
+                )
             ]
             encoder_examples_ids = [
                 example[: pivotpoints[i]]
-                for i, example in enumerate(examples_ids_and_masks['input_ids'])
+                for i, example in enumerate(examples_ids_and_masks["input_ids"])
             ]
             encoder_attention_mask = [
                 example[: pivotpoints[i]]
-                for i, example in enumerate(examples_ids_and_masks['attention_mask'])
+                for i, example in enumerate(examples_ids_and_masks["attention_mask"])
             ]
             label_ids = [
-                example[pivotpoints[i]:]
-                for i, example in enumerate(examples_ids_and_masks['input_ids'])
+                example[pivotpoints[i] :]
+                for i, example in enumerate(examples_ids_and_masks["input_ids"])
             ]
 
         if self.append_special_token_to_input is not None:
-            append_special_token_to_input_id = self.tokenizer.vocab[self.append_special_token_to_input]
+            append_special_token_to_input_id = self.tokenizer.vocab[
+                self.append_special_token_to_input
+            ]
             encoder_seq_length -= 1
             input_end = [append_special_token_to_input_id, eos_token_id]
             attention_mask_end = [1, 1]
@@ -159,25 +193,22 @@ class DataCollatorNTP():
 
         # a column-wise representation of the examples is needed for the tokenizer.pad function
         example_dict: dict[str, list[list[int]]] = {}
+
         # truncate the input_ids to the encoder_seq_length from the beginning,
         # add the </s> (EOS) special token at the end, and
         # add the <s> (BOS) special token at the beginning if there is enough space
         def _add_bos_if_enough_space(
             label_seq: list[int], added_val: int = bos_token_id
         ) -> list[int]:
-            if (
-                len(label_seq) < encoder_seq_length - 1 and
-                (len(label_seq) == 0 or label_seq[0] != added_val)
+            if len(label_seq) < encoder_seq_length - 1 and (
+                len(label_seq) == 0 or label_seq[0] != added_val
             ):
                 return [added_val] + label_seq
             else:
                 return label_seq
 
         example_dict["input_ids"] = [
-            _add_bos_if_enough_space(
-                example[-(encoder_seq_length - 1) :]
-            )
-            + input_end
+            _add_bos_if_enough_space(example[-(encoder_seq_length - 1) :]) + input_end
             for example in encoder_examples_ids
         ]
         # truncate the attention_mask to the encoder_seq_length from the beginning
@@ -190,91 +221,105 @@ class DataCollatorNTP():
             for example in encoder_attention_mask
         ]
 
+        if not do_labels_decoder_input:
+            # temporarily add begin bos if not added,
+            for i in range(len(example_dict["input_ids"])):
+                if example_dict["input_ids"][i][0] != bos_token_id:
+                    example_dict["input_ids"][i][0] = bos_token_id
+
         # add padding to the input_ids and attention_mask
         if not self.add_max_padding:
-            encoding: BatchEncoding = self.tokenizer.pad(example_dict, return_tensors="pt")
+            encoding: BatchEncoding = self.tokenizer.pad(
+                example_dict, return_tensors="pt"
+            )
         else:
             encoding: BatchEncoding = self.tokenizer.pad(
                 example_dict,
-                padding='max_length',
+                padding="max_length",
                 max_length=self.encoder_seq_length,
-                return_tensors="pt"
+                return_tensors="pt",
             )
 
-        # truncate the labels to the decoder_seq_length from the end,
-        # add the <s> (BOS) special token at the beginning, and
-        # add the </s> (EOS) special token at the end if there is enough space
-        def _add_eos_if_enough_space(label_seq: list[int]) -> list[int]:
-            if (
-                len(label_seq) < decoder_seq_length - 1 and
-                (len(label_seq) == 0 or label_seq[-1] != eos_token_id)
-            ):
-                return label_seq + [eos_token_id]
-            else:
-                return label_seq
+        if do_labels_decoder_input:
+            # truncate the labels to the decoder_seq_length from the end,
+            # add the <s> (BOS) special token at the beginning, and
+            # add the </s> (EOS) special token at the end if there is enough space
+            def _add_eos_if_enough_space(label_seq: list[int]) -> list[int]:
+                if len(label_seq) < decoder_seq_length - 1 and (
+                    len(label_seq) == 0 or label_seq[-1] != eos_token_id
+                ):
+                    return label_seq + [eos_token_id]
+                else:
+                    return label_seq
 
-        labels = [
-            [bos_token_id]
-            + _add_eos_if_enough_space(
-                label_seq=example[: decoder_seq_length - 1]
-            )
-            for example in label_ids
-        ]
-        # add padding to the labels using -100 as the ignore_index
-        if not self.add_max_padding:
-            max_label_length = max(len(label_seq) for label_seq in labels)
-        else:
-            max_label_length = self.decoder_seq_length
-        encoding["labels"] = torch.tensor(
-            [
-                label_seq + [-100] * (max_label_length - len(label_seq))
-                for label_seq in labels
-            ]
-        )
-        # shift the labels to the right by one position and
-        # initialize the decoder_input_ids with the pad token
-        # (we cannot leave this to `T5ForConditionalGeneration._shift_right` because the labels contain -100)
-        decoder_input_ids = [
-            [pad_token_id]
-            + (
+            labels = [
                 [bos_token_id]
-                + _add_eos_if_enough_space(
-                    example[: decoder_seq_length - 1]
-                )
-            )[:-1]
-            for example in label_ids
-        ]
+                + _add_eos_if_enough_space(label_seq=example[: decoder_seq_length - 1])
+                for example in label_ids
+            ]
 
-        if not self.add_max_padding:
-            max_decoder_input_length = max(
-                len(decoder_input_id_seq) for decoder_input_id_seq in decoder_input_ids
+            # add padding to the labels using -100 as the ignore_index
+            if not self.add_max_padding:
+                max_label_length = max(len(label_seq) for label_seq in labels)
+            else:
+                max_label_length = self.decoder_seq_length
+
+            encoding["labels"] = torch.tensor(
+                [
+                    label_seq + [-100] * (max_label_length - len(label_seq))
+                    for label_seq in labels
+                ]
+            )
+            # shift the labels to the right by one position and
+            # initialize the decoder_input_ids with the pad token
+            # (we cannot leave this to `T5ForConditionalGeneration._shift_right` because the labels contain -100)
+            decoder_input_ids = [
+                [pad_token_id]
+                + (
+                    [bos_token_id]
+                    + _add_eos_if_enough_space(example[: decoder_seq_length - 1])
+                )[:-1]
+                for example in label_ids
+            ]
+
+            if not self.add_max_padding:
+                max_decoder_input_length = max(
+                    len(decoder_input_id_seq)
+                    for decoder_input_id_seq in decoder_input_ids
+                )
+            else:
+                max_decoder_input_length = self.decoder_seq_length
+
+            assert max_decoder_input_length == max_label_length
+            encoding["decoder_input_ids"] = torch.tensor(
+                [
+                    decoder_input_id_seq
+                    + [pad_token_id]
+                    * (max_decoder_input_length - len(decoder_input_id_seq))
+                    for decoder_input_id_seq in decoder_input_ids
+                ]
             )
         else:
-            max_decoder_input_length = self.decoder_seq_length
-
-        assert max_decoder_input_length == max_label_length
-        encoding["decoder_input_ids"] = torch.tensor(
-            [
-                decoder_input_id_seq
-                + [pad_token_id] * (max_decoder_input_length - len(decoder_input_id_seq))
-                for decoder_input_id_seq in decoder_input_ids
-            ]
-        )
+            encoding["labels"] = label_ids_pt
         return encoding
-    
+
 
 def get_debug_pivot_sets(ds_pivots, opt):
     # TODO: add rank support, for now run only on one gpu
-    ds_pivots_train  = ds_pivots[opt.overfit_split].shuffle(seed=opt.seed)
+    ds_pivots_train = ds_pivots[opt.overfit_split].shuffle(seed=opt.seed)
     ds_pivot_overfit = datasets.DatasetDict()
-    ds_pivot_overfit['train'] = ds_pivots_train.select(range(opt.overfit_split_size))
+    ds_pivot_overfit["train"] = ds_pivots_train.select(range(opt.overfit_split_size))
     if opt.is_overfit_split_eval_as_train:
-        ds_pivot_overfit['validation'] = ds_pivot_overfit['train']
+        ds_pivot_overfit["validation"] = ds_pivot_overfit["train"]
     else:
-        ds_pivot_overfit['validation'] = ds_pivots_train.select(
-            range(opt.overfit_split_size, opt.overfit_split_size+opt.overfit_split_size_eval)
+        ds_pivot_overfit["validation"] = ds_pivots_train.select(
+            range(
+                opt.overfit_split_size,
+                opt.overfit_split_size + opt.overfit_split_size_eval,
+            )
         )
     return ds_pivot_overfit
+
 
 def assert_debug_data(ctx, opt):
     # test only valid for this seed
@@ -283,57 +328,46 @@ def assert_debug_data(ctx, opt):
     # and ...
     assert opt.seed == 42
     assert opt.overfit_split_size >= 10
-    assert opt.overfit_split == 'validation'
+    assert opt.overfit_split == "validation"
     assert opt.is_overfit_split_eval_as_train == True
 
     data_ids = [2049, 109, 8793, 5262, 5906, 3713, 6041, 9721, 518, 7970]
 
     # test train indexes are a match
     train_pivots = ctx.ds_pivots["train"][:10]
-    assert all(a == b for a, b in zip(
-        train_pivots['data_idx'], data_ids
-    ))
+    assert all(a == b for a, b in zip(train_pivots["data_idx"], data_ids))
 
     # test validatin indexes are a match and the same as train ones
     val_pivots = ctx.ds_pivots["validation"][:10]
-    assert all(a == b for a, b in zip(
-        val_pivots['data_idx'], data_ids
-    ))
+    assert all(a == b for a, b in zip(val_pivots["data_idx"], data_ids))
 
     # test indexes point to the same data samples
-    data = ctx.ds_data[val_pivots['split'][0]][val_pivots['data_idx']]
+    data = ctx.ds_data[val_pivots["split"][0]][val_pivots["data_idx"]]
 
     max_stars_repo_path = [
-        'hibernate-reactive-core/src/main/java/org/hibernate/reactive/vertx/package-info.java',
-        'overlap2d/src/com/uwsoft/editor/view/menu/Overlap2DMenuBarMediator.java',
-        'src/test/java/com/github/albahrani/aquacontrol/server/LightServerTest.java',
-        'src/org/earthChem/db/CitationList.java',
-        'vertx-pin/zero-ke/src/main/java/io/vertx/tp/ke/refine/KeCompare.java',
-        'Tangerine/api/src/main/java/org/mitre/tangerine/adapter/InboundAdapter.java',
-        'src/main/java/de/rwth/idsg/bikeman/psinterface/dto/response/CardWriteKeyDTO.java',
-        'junit/src/org/apache/tapestry/junit/form/TestListEditMap.java',
-        'src/com/oltpbenchmark/benchmarks/auctionmark/util/ItemInfo.java',
-        'codigo/RedeSocial/src/br/com/redesocial/modelo/bo/EstadoBO.java'
+        "hibernate-reactive-core/src/main/java/org/hibernate/reactive/vertx/package-info.java",
+        "overlap2d/src/com/uwsoft/editor/view/menu/Overlap2DMenuBarMediator.java",
+        "src/test/java/com/github/albahrani/aquacontrol/server/LightServerTest.java",
+        "src/org/earthChem/db/CitationList.java",
+        "vertx-pin/zero-ke/src/main/java/io/vertx/tp/ke/refine/KeCompare.java",
+        "Tangerine/api/src/main/java/org/mitre/tangerine/adapter/InboundAdapter.java",
+        "src/main/java/de/rwth/idsg/bikeman/psinterface/dto/response/CardWriteKeyDTO.java",
+        "junit/src/org/apache/tapestry/junit/form/TestListEditMap.java",
+        "src/com/oltpbenchmark/benchmarks/auctionmark/util/ItemInfo.java",
+        "codigo/RedeSocial/src/br/com/redesocial/modelo/bo/EstadoBO.java",
     ]
-    assert all(a == b for a, b in zip(
-        data['max_stars_repo_path'], max_stars_repo_path
-    ))
+    assert all(a == b for a, b in zip(data["max_stars_repo_path"], max_stars_repo_path))
 
     max_stars_repo_name = [
-        'tsegismont/hibernate-reactive',
-        'i-Taozi/overlap2d',
-        'albahrani/aquacontrol-server',
-        'earthchem/EarthChemAdmin2',
-        'evgreenhua/vertx-zero',
-        'samant8/member-MITRE',
-        'BulkSecurityGeneratorProject/BikeMan',
-        'JLLeitschuh/tapestry3',
-        'MooPoo13/oltpbench',
-        'Ronneesley/redesocial'
+        "tsegismont/hibernate-reactive",
+        "i-Taozi/overlap2d",
+        "albahrani/aquacontrol-server",
+        "earthchem/EarthChemAdmin2",
+        "evgreenhua/vertx-zero",
+        "samant8/member-MITRE",
+        "BulkSecurityGeneratorProject/BikeMan",
+        "JLLeitschuh/tapestry3",
+        "MooPoo13/oltpbench",
+        "Ronneesley/redesocial",
     ]
-    assert all(a == b for a, b in zip(
-        data['max_stars_repo_name'], max_stars_repo_name
-    ))
-
-
-    
+    assert all(a == b for a, b in zip(data["max_stars_repo_name"], max_stars_repo_name))
