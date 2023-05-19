@@ -33,6 +33,7 @@ FiD_randomNN_model_512_63_truncation-direct: 5030/10000, EM=50.3, Unique Holes=1
 1000_32_no-truncation-codex-last: 7539/10000, EM=75.39, Unique Holes=10000
 1500_32_no-truncation-codex-last: 7567/10000, EM=75.67, Unique Holes=10000
 2000_32_no-truncation-codex-last: 7565/10000, EM=75.65, Unique Holes=10000
+2500_32_no-truncation-codex-last: 7556/10000, EM=75.56, Unique Holes=10000
 3000_32_no-truncation-codex-last: 7554/10000, EM=75.54, Unique Holes=10000
 
 100_63_no-truncation-codex-last: 5485/10000, EM=54.85, Unique Holes=10000
@@ -51,6 +52,21 @@ FiD_randomNN_model_512_63_truncation-direct: 5030/10000, EM=50.3, Unique Holes=1
 2500_63_no-truncation-codex-last: 7559/10000, EM=75.59, Unique Holes=10000
 
 
+128_32_truncation-direct: 5410/10000, EM=54.1, Unique Holes=10000
+256_32_truncation-direct: 6592/10000, EM=65.92, Unique Holes=10000
+512_32_truncation-direct: 7146/10000, EM=71.46, Unique Holes=10000
+768_32_truncation-direct: 7278/10000, EM=72.78, Unique Holes=10000
+1024_32_truncation-direct: 7366/10000, EM=73.66, Unique Holes=10000
+1536_32_truncation-direct: 7438/10000, EM=74.38, Unique Holes=10000
+2000_32_truncation-direct: 7436/10000, EM=74.36, Unique Holes=10000
+
+128_63_truncation-direct: 5398/10000, EM=53.98, Unique Holes=10000
+256_63_truncation-direct: 6620/10000, EM=66.2, Unique Holes=10000
+512_63_truncation-direct: 7192/10000, EM=71.92, Unique Holes=10000
+768_63_truncation-direct: 7347/10000, EM=73.47, Unique Holes=10000
+1024_63_truncation-direct: 7442/10000, EM=74.42, Unique Holes=10000
+2000_63_truncation-direct: 7516/10000, EM=75.16, Unique Holes=10000
+
 1024_16_no-truncation-codex-last: 7399/10000, EM=73.99, Unique Holes=10000
 
 #effect of #contexts
@@ -63,6 +79,7 @@ FiD_randomNN_model_512_63_truncation-direct: 5030/10000, EM=50.3, Unique Holes=1
 512_63_no-truncation-codex-last: 7473/10000, EM=74.73, Unique Holes=10000
 512_72_no-truncation-codex-last: 7470/10000, EM=74.7, Unique Holes=10000
 512_128_no-truncation-codex-last: 7468/10000, EM=74.68, Unique Holes=10000
+512_256_no-truncation-codex-last: 7465/10000, EM=74.65, Unique Holes=10000
 
 768_1_no-truncation-codex-last: 4918/10000, EM=49.18, Unique Holes=10000
 768_2_no-truncation-codex-last: 6154/10000, EM=61.54, Unique Holes=10000
@@ -72,7 +89,23 @@ FiD_randomNN_model_512_63_truncation-direct: 5030/10000, EM=50.3, Unique Holes=1
 768_32_no-truncation-codex-last: 7482/10000, EM=74.82, Unique Holes=10000
 768_64_no-truncation-codex-last: 7520/10000, EM=75.2, Unique Holes=10000
 768_128_no-truncation-codex-last: 7524/10000, EM=75.24, Unique Holes=10000
+768_256_no-truncation-codex-last: 7524/10000, EM=75.24, Unique Holes=10000
 
+768_1_truncation-direct: 5625/10000, EM=56.25, Unique Holes=10000
+768_2_truncation-direct: 5626/10000, EM=56.26, Unique Holes=10000
+768_4_truncation-direct: 5771/10000, EM=57.71, Unique Holes=10000
+768_8_truncation-direct: 6279/10000, EM=62.79, Unique Holes=10000
+768_16_truncation-direct: 6542/10000, EM=65.42, Unique Holes=10000
+768_32_truncation-direct: 7278/10000, EM=72.78, Unique Holes=10000
+768_63_truncation-direct: 7347/10000, EM=73.47, Unique Holes=10000
+
+512_1_truncation-direct: 5471/10000, EM=54.71, Unique Holes=10000
+512_2_truncation-direct: 5469/10000, EM=54.69, Unique Holes=10000
+512_4_truncation-direct: 5642/10000, EM=56.42, Unique Holes=10000
+512_8_truncation-direct: 6168/10000, EM=61.68, Unique Holes=10000
+512_16_truncation-direct: 6434/10000, EM=64.34, Unique Holes=10000
+512_32_truncation-direct: 7146/10000, EM=71.46, Unique Holes=10000
+512_63_truncation-direct: 7192/10000, EM=71.92, Unique Holes=10000
 
 
 # effect of not appending hole context
@@ -93,3 +126,70 @@ Fid_init_pretrained_768_32_no-truncation-codex-last: 6191/10000, EM=61.91, Uniqu
 Fid_init_pretrained_768_32_no-truncation-direct: 6088/10000, EM=60.88, Unique Holes=10000
 Fid_init_pretrained_768_32_truncation-direct: 5957/10000, EM=59.57, Unique Holes=10000
 Fid_init_pretrained_768_32_truncation-random: 5467/10000, EM=54.67, Unique Holes=10000
+
+#effect of repetition
+512_63_no-truncation-direct: 7466/10000, EM=74.66, Unique Holes=10000
+512_63_truncation-direct: 7192/10000, EM=71.92, Unique Holes=10000
+repeated_toprule_repeated_toprule: 5464/10000, EM=54.64, Unique Holes=10000
+repeated_randomrule_repeated_randomrule: 3718/10000, EM=37.18, Unique Holes=10000
+repeated_priorrule_repeated_priorrule: 5069/10000, EM=50.69, Unique Holes=10000
+
+#effect of #PPCs
+512_1_no-truncation-codex-last.json 10000 1.0
+512_2_no-truncation-codex-last.json 10000 1.3501
+512_4_no-truncation-codex-last.json 10000 2.2145
+512_8_no-truncation-codex-last.json 10000 4.2095
+512_16_no-truncation-codex-last.json 10000 8.0882
+512_32_no-truncation-codex-last.json 10000 15.8613
+512_64_no-truncation-codex-last.json 10000 25.539
+512_128_no-truncation-codex-last.json 10000 32.0026
+512_256_no-truncation-codex-last.json 10000 32.6935
+
+768_1_no-truncation-codex-last.json 10000 1.0
+768_2_no-truncation-codex-last.json 10000 1.4751
+768_4_no-truncation-codex-last.json 10000 2.6401
+768_8_no-truncation-codex-last.json 10000 5.1844
+768_16_no-truncation-codex-last.json 10000 10.4177
+768_32_no-truncation-codex-last.json 10000 19.6129
+768_64_no-truncation-codex-last.json 10000 29.548
+768_128_no-truncation-codex-last.json 10000 32.6811
+768_256_no-truncation-codex-last.json 10000 32.6959
+
+
+# effect of rlpg
+768_1_no-truncation-codex-last: 4918/10000, EM=49.18, Unique Holes=10000
+768_2_no-truncation-codex-last: 6154/10000, EM=61.54, Unique Holes=10000
+768_4_no-truncation-codex-last: 6532/10000, EM=65.32, Unique Holes=10000
+768_8_no-truncation-codex-last: 7010/10000, EM=70.1, Unique Holes=10000
+768_16_no-truncation-codex-last: 7343/10000, EM=73.43, Unique Holes=10000
+768_32_no-truncation-codex-last: 7482/10000, EM=74.82, Unique Holes=10000
+768_64_no-truncation-codex-last: 7520/10000, EM=75.2, Unique Holes=10000
+768_128_no-truncation-codex-last: 7524/10000, EM=75.24, Unique Holes=10000
+768_256_no-truncation-codex-last: 7524/10000, EM=75.24, Unique Holes=10000
+
+768_1_rlpg_no-truncation-codex-last: 4565/10000, EM=45.65, Unique Holes=10000
+768_2_rlpg_no-truncation-codex-last: 5375/10000, EM=53.75, Unique Holes=10000
+768_4_rlpg_no-truncation-codex-last: 5877/10000, EM=58.77, Unique Holes=10000
+768_8_rlpg_no-truncation-codex-last: 6402/10000, EM=64.02, Unique Holes=10000
+768_16_rlpg_no-truncation-codex-last: 6836/10000, EM=68.36, Unique Holes=10000
+768_32_rlpg_no-truncation-codex-last: 7222/10000, EM=72.22, Unique Holes=10000
+
+
+#rlpg-random test
+768_4_rlpg_no-truncation-direct: 7766/12500, EM=62.128, Unique Holes=12500
+768_8_rlpg_no-truncation-direct: 8286/12500, EM=66.288, Unique Holes=12500
+768_16_rlpg_no-truncation-direct: 8841/12500, EM=70.728, Unique Holes=12500
+768_32_rlpg_no-truncation-direct: 9367/12500, EM=74.936, Unique Holes=12500
+768_63_rlpg_no-truncation-direct: 9726/12500, EM=77.808, Unique Holes=12500
+
+768_4_no-truncation-direct: 7431/12500, EM=59.448, Unique Holes=12500
+768_16_no-truncation-direct: 8691/12500, EM=69.528, Unique Holes=12500
+768_8_no-truncation-direct: 8050/12500, EM=64.4, Unique Holes=12500
+768_32_no-truncation-direct: 9567/12500, EM=76.536, Unique Holes=12500
+768_63_no-truncation-direct: 9767/12500, EM=78.136, Unique Holes=12500
+
+
+
+
+
+
