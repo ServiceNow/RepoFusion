@@ -24,6 +24,7 @@ def get_java_files_remove_files_present_in_reconstructed_repos(opt):
     """
     Separates Java files from the stack 1.1 used to train SantaCoder
     and removes files used in reconstruction of a set 1K repos form the dataset
+    used for Stack Repo.
     """
     df = pd.read_parquet(opt.filename_1K_20plus_file_list)
     used_repo_names = set(df["name"].str.lower())
