@@ -61,6 +61,8 @@ def evaluate(model, dataset, collator, tokenizer, opt, stopping_criteria, logger
             # print("context_mask", context_mask.shape)
             # print("labels", labels.shape)
             # print("idx", idx)
+            # if i % 100 == 0:
+            #     print(i, hole_id, flag)
             if flag:
                 #print(i, hole_id, flag)
                 if context_ids.size(1) == 0:
@@ -253,7 +255,8 @@ def run(opt):
                                         is_append_question=opt.is_append_question, \
                                         text_maxlen=opt.text_maxlength, \
                                         num_of_examples=opt.num_of_eval_examples_per_gpu, \
-                                        model_type=opt.model_type)
+                                        model_type=opt.model_type,
+                                        write_hole_pp_mappings=opt.write_hole_pp_mappings,)
         logger.info(f'Loaded {len(eval_dataset)} validation examples from {opt.eval_data}')
     else:
         eval_dataset = src.data.Dataset(
@@ -272,6 +275,7 @@ def run(opt):
             text_maxlen=opt.text_maxlength,
             num_of_examples=opt.num_of_eval_examples_per_gpu,
             model_type=opt.model_type,
+            write_hole_pp_mappings=opt.write_hole_pp_mappings,
         )
         logger.info(f'Loaded {len(eval_dataset)} validation examples from {opt.dataset_path}:{opt.eval_split_name}')
 

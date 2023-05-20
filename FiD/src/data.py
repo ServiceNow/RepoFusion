@@ -9,10 +9,17 @@ import torch
 import random
 import json
 import numpy as np
+import pickle
 
 import datasets
 from datasets.distributed import split_dataset_by_node
 from pathlib import Path
+import transformers
+
+# from options import Options
+# from torch.utils.data import DataLoader, SequentialSampler
+# import multiprocessing
+# import slurm
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(
@@ -35,6 +42,7 @@ class Dataset(torch.utils.data.Dataset):
         is_append_question=True, 
         num_of_examples=-1,
         model_type='codet5',
+        write_hole_pp_mappings=False
     ):
         assert data_path
         if features_format_file is not None:
@@ -99,6 +107,12 @@ class Dataset(torch.utils.data.Dataset):
         self.text_maxlen = text_maxlen
         self.tokenizer = tokenizer
         self.is_append_question = is_append_question
+        self.write_hole_pp_mappings = write_hole_pp_mappings
+        if self.write_hole_pp_mappings:
+            hole_pp_filename = os.path.join('/repo_data/repo_preprocessed_data/hole_pp_mappings', \
+                                            str(self.text_maxlen) + '_' + str(self.n_context) + '_' + self.passage_mode + '.json')
+            print(hole_pp_filename)
+            self.hole_pp_map = open(hole_pp_filename, 'a')
 
         if self.passage_mode == 'pretrained' or self.passage_mode == 'finetuned' or self.passage_mode == 'toprule+prior':
             self.n_context = 1
@@ -150,7 +164,7 @@ class Dataset(torch.utils.data.Dataset):
             context['text'], _ = self.truncate_rule_context(context['text'], rule_context_len, rule_truncation_strategy)
         return contexts
 
-    def get_contexts(self, contexts, question=None):
+    def get_contexts(self, contexts, question=None, hole_id=''):
         # the passages are already stored in sorted rule order.
         if self.passage_mode == 'pretrained' or self.passage_mode == 'finetuned':
             prior_context = contexts[16]
@@ -158,6 +172,28 @@ class Dataset(torch.utils.data.Dataset):
                 return []
             prior_context['text'], _ = self.truncate_rule_context(prior_context['text'], self.text_maxlen, truncation_strategy='front')
             return [prior_context]
+
+        if self.passage_mode == 'repeated_toprule':
+            top_rule_context = contexts[0]
+            if not top_rule_context['text']:
+                return []
+            repeated_contexts = [top_rule_context] * self.n_context
+            return self.truncate_contexts(repeated_contexts, question)
+
+        if self.passage_mode == 'repeated_randomrule':
+            idx = np.random.randint(0, len(contexts))
+            random_rule_context = contexts[idx]
+            if not random_rule_context['text']:
+                return []
+            repeated_contexts = [random_rule_context] * self.n_context
+            return self.truncate_contexts(repeated_contexts, question)
+
+        if self.passage_mode == 'repeated_priorrule':
+            prior_rule_context = contexts[16]
+            if not prior_rule_context['text']:
+                return []
+            repeated_contexts = [prior_rule_context] * self.n_context
+            return self.truncate_contexts(repeated_contexts, question)
 
         if self.passage_mode == 'toprule+prior':
             prior_context = contexts[16]
@@ -255,6 +291,13 @@ class Dataset(torch.utils.data.Dataset):
                     contexts_before_codex.append({'title': codex_context['title'], \
                                                 'text': self.tokenizer.decode(part, skip_special_tokens=True), \
                                                 'score': codex_context['score']})
+
+            if self.write_hole_pp_mappings:
+                prompt_proposals = [c['title'] for c in contexts_before_codex]
+                entry = {"id": hole_id, "prompt_proposals": prompt_proposals}
+                self.hole_pp_map.write(json.dumps(entry) + '\n')
+                self.hole_pp_map.flush()
+
             return contexts_before_codex
 
     def get_formatted_passages_and_scores(self, contexts):
@@ -281,7 +324,7 @@ class Dataset(torch.utils.data.Dataset):
         target = example['target']
 
         if 'ctxs' in example and self.n_context is not None:
-            contexts = self.get_contexts(example['ctxs'], question)
+            contexts = self.get_contexts(example['ctxs'], question, example['id'])
             if len(contexts) > 0:
                 passages, scores = self.get_formatted_passages_and_scores(contexts)
             else:
@@ -626,3 +669,63 @@ class HoleContextCollator(object):
                                         max_length=self.maxlength,
                                         truncation=True)
         return hole_context["input_ids"], hole_context["attention_mask"], hole_id
+
+
+if __name__ == "__main__":
+    options = Options()
+    options.add_reader_options()
+    options.add_eval_options()
+    opt = options.parse()  
+    torch.manual_seed(opt.seed)
+    slurm.init_distributed_mode(opt)
+    slurm.init_signal_handler()
+
+    text_maxlen = 768
+    n_context = 4
+    passage_mode = 'no-truncation-codex-last' 
+    dataset_path = '/repo_data/repo_preprocessed_data/'
+
+    model_name = opt.model_name + '-' +opt.model_size
+    tokenizer = transformers.RobertaTokenizer.from_pretrained(model_name)
+    eval_dataset = Dataset(
+        data_path=dataset_path,
+        features_format_file=opt.features_format_file,
+        data_file_pattern=opt.data_file_pattern,
+        split='random_val',
+        hf_datasets_cache_dir=opt.hf_datasets_cache_dir,
+        hf_datasets_load_num_proc=opt.hf_datasets_load_num_proc,
+        global_rank=opt.global_rank,
+        world_size=opt.world_size,
+        n_context = n_context,
+        tokenizer=tokenizer,
+        passage_mode=passage_mode,
+        is_append_question=opt.is_append_question,
+        text_maxlen=text_maxlen,
+        num_of_examples=-1,
+        model_type=opt.model_type,
+    )
+
+    # collator = Collator(text_maxlength=text_maxlen, \
+    #                     tokenizer=tokenizer, \
+    #                     answer_maxlength=512,
+    #                     is_append_question=True,
+    #                     model_type=opt.model_type,
+    #                     passage_mode=passage_mode,)
+                                    
+    sampler = SequentialSampler(eval_dataset)
+    dataloader = DataLoader(eval_dataset,
+        sampler=sampler,
+        batch_size=1,
+        drop_last=False,
+        num_workers=min(max(multiprocessing.cpu_count()-1, 1), 20),
+    )
+    hole_pp_mapping = {}
+    for i, batch in enumerate(dataloader):
+        if i%100 == 0:
+            print(i, n_context, text_maxlen)
+        hole_id = batch['hole_id'][0]
+        pp = batch['prompt_proposals']
+        hole_pp_mapping[hole_id] = pp
+
+    with open(os.path.join(dataset_path, 'hole_pp_mappings', str(text_maxlen) + '_' + str(n_context) + '_' + passage_mode), 'wb') as f:
+        pickle.dump(hole_pp_mapping, f)

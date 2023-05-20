@@ -63,6 +63,7 @@ if __name__ == '__main__':
   dataset = src.data.HoleContextDataset(os.path.join('/repo_data/repo_preprocessed_data/', args.data_split), \
                                         tokenizer=tokenizer, 
                                         num_of_examples=-1) 
+  print("Number of holes in dataset: ", len(dataset))
   collate_fn = src.data.HoleContextCollator(tokenizer=tokenizer)
   data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, collate_fn=collate_fn, **kwargs)
 
@@ -77,7 +78,11 @@ if __name__ == '__main__':
   with torch.no_grad():
     hole_stats = {}
 
+    count = 0
     for batch in tqdm(data_loader):
+      if count %100 == 0:
+        print("Number of holes processed: ", len(hole_stats))
+      count += 1
       hole_context = batch[0].to(device)
       hole_attention_mask = batch[1].to(device)
       hole_id = batch[2]
@@ -86,7 +91,9 @@ if __name__ == '__main__':
                                       (hole_context, hole_attention_mask), \
                                       hole_id, \
                                       hole_stats)
-      if len(hole_stats) > 500:
-        with open(out_filename, 'ab') as f_out:
-          pickle.dump(hole_stats, f_out)
-        hole_stats = {}
+
+      if len(hole_stats)%100 == 0:
+        print("Number of holes in hole_stats: ", len(hole_stats))
+
+  with open(out_filename, 'wb') as f_out:
+    pickle.dump(hole_stats, f_out)

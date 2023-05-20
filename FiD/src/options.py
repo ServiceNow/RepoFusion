@@ -92,6 +92,7 @@ class Options():
                         help='article titles not included in passages')
         self.parser.add_argument('--n_context', type=int, default=63)
         self.parser.add_argument('--is_append_question', action='store_false', help='whether to append question to passage')
+        self.parser.add_argument('--write_hole_pp_mappings', action='store_true', help='whether to write hole PP mappings or not')
         self.parser.add_argument('--passage_mode', type=str, default = 'truncation-direct', \
                                     help = 'different modes of treating the passages. Options are truncation-direct, no-truncation-direct, \
                                     truncation-random, no-truncation-codex-last, truncation-codex-last')
