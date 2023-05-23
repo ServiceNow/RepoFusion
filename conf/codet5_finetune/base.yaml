@@ -1,6 +1,6 @@
 # Data preparation params
 filename_1K_20plus_file_list: /data/hf_repos/the-stak-repo-level/meta_data/java/1K_20plus_file_list.parquet
-filename_the_stack11_dedup_alt_comments: /data/christmas_datasets/the_stack_dedup_alt_comments.jsonl
+filename_the_stack11_dedup_alt_comments: /repo_data/the_stack11_dedup_alt_comments/data/the_stack_dedup_alt_comments.jsonl
 path_java_filtered_subset_root:  /repo_data/the_stack11_dedup_alt_comments_no_1K_set_subset
 java_filtered_subset_data_dir: data
 java_filtered_subset_pivots_dir: pivots
@@ -19,9 +19,12 @@ num_proc: 8
 seed: 42
 
 
+# Model params
 add_max_padding: False
 
-# Model params
+
+# These params are for alternative format of the dataset then pivot/holes points are
+# already processed and are in the same dataset, not used in default pipeline
 dataset_format_separate_data_pivot_points: True
 dataset_file: /repo_data/repo_preprocessed_data/medium_eval_prior_contexts.json
 dataset_cache_dir: /repo_data/hf_datasets_cashe
@@ -61,7 +64,6 @@ decoder_seq_length: 512
 eval_generate_seq_length: 100
 evel_generate_use_eol_stop_tokens: True
 
-# if wold have been perfect 4e-6 and several epochs
 num_train_epochs: 1
 # True batch: per_gpu_batch_size * n_gpu * gradient_accumulation_steps
 gradient_accumulation_steps: 1
