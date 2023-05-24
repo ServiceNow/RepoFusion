@@ -1,5 +1,0 @@
-resources:
-  cpu: 8
-  mem: 48
-  gpu: 2
-  gpuMem: 80
