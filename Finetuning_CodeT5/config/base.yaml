@@ -1,6 +1,6 @@
 # Data preparation params
-filename_1K_20plus_file_list: /data/hf_repos/the-stak-repo-level/meta_data/java/1K_20plus_file_list.parquet
-filename_the_stack11_dedup_alt_comments: /repo_data/the_stack11_dedup_alt_comments/data/the_stack_dedup_alt_comments.jsonl
+filename_1K_20plus_file_list: Finetuning_CodeT5/1K_20plus_file_list.parquet
+filename_the_stack11_dedup_alt_comments: bigcode/stack-dedup-alt-comments
 path_java_filtered_subset_root:  /repo_data/the_stack11_dedup_alt_comments_no_1K_set_subset
 java_filtered_subset_data_dir: data
 java_filtered_subset_pivots_dir: pivots

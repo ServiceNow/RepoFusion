@@ -2,11 +2,9 @@
 This folder contais code to prepare dataset and fine tune `codet5` models on the next token prediction (NTP) objective on the Java subset of `The Stack`. Please see the paper for details on the dataset. 
 
 ## Dataset preparation
-Modify the cofing file `[this repo root]/Finetuning_CodeT5/config/base.yaml`. Only parameters under `Data preparation params` has effect on data preparation. Set the following parmeters to local dataset path:
-- `filename_1K_20plus_file_list` - the path to a file `[this repo root]/Finetuning_CodeT5/1K_20plus_file_list.parquet` with the list of files to exclude, those files are partially used in `Stack Repo`
-- `filename_the_stack11_dedup_alt_comments` - local path to  `stack-dedup-alt-comments`
+Modify the cofing file `[this repo root]/Finetuning_CodeT5/config/base.yaml`. Only parameters under `Data preparation params` has effect on data preparation. Set the following parmeter to local target dataset path:
 - `path_java_filtered_subset_root` - destination path for the fine tuning dataset
-- the rest of the parameters control split sizes, seed etc.
+- the rest of the parameters control path to a list of files to exclude, source dataseet name, split sizes, seed etc.
 
 Set `PYTHONPATH` to the this repository root. From this repository root run:
 ```

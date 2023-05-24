@@ -4,7 +4,7 @@ This file contains top level entry point for running training or finetuning on m
 
 import os
 
-from codet5_finetune.model_context import get_model_context
+from Finetuning_CodeT5.model_context import get_model_context
 
 
 def run(ctx):

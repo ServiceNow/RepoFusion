@@ -18,8 +18,8 @@ import random
 
 from transformers import AutoTokenizer
 
-from codet5_finetune.options import options
-from codet5_finetune.util import set_global_seeds
+from Finetuning_CodeT5.options import options
+from Finetuning_CodeT5.util import set_global_seeds
 
 # Hack from here: https://github.com/huggingface/datasets/issues/1785#issuecomment-1305872400
 datasets.builder.has_sufficient_disk_space = lambda needed_bytes, directory=".": True
@@ -37,11 +37,17 @@ def get_java_files_remove_files_present_in_reconstructed_repos(opt):
     opt.filename_the_stack11_dedup_alt_comments = Path(
         opt.filename_the_stack11_dedup_alt_comments
     )
-    ds = datasets.load_dataset(
-        str(opt.filename_the_stack11_dedup_alt_comments.parent),
-        data_files=opt.filename_the_stack11_dedup_alt_comments.name,
-        num_proc=opt.num_proc,
-    )
+    if opt.filename_the_stack11_dedup_alt_comments.is_file():
+        ds = datasets.load_dataset(
+            str(opt.filename_the_stack11_dedup_alt_comments.parent),
+            data_files=opt.filename_the_stack11_dedup_alt_comments.name,
+            num_proc=opt.num_proc,
+        )
+    else:
+        ds = datasets.load_dataset(
+            str(opt.filename_the_stack11_dedup_alt_comments),
+            num_proc=opt.num_proc,
+        )
     ds = ds.filter(
         lambda data: (
             data["lang"] == "Java"

@@ -1,4 +1,4 @@
- """
+"""
 This is the main file which combines options for data, training and evaluation 
 for HuggingFace datasets and trainer classes and custom data collator, stopping criteria,
 metrics and evaluation functions into context which can be used for training and evaluation.
@@ -28,12 +28,12 @@ from transformers import (
     StoppingCriteriaList,
 )
 
-from codet5_finetune.options import options
-from codet5_finetune.distributed import set_distributed_options
-from codet5_finetune.util import set_global_seeds
-from codet5_finetune.metrics import compute_metrics
+from Finetuning_CodeT5.options import options
+from Finetuning_CodeT5.distributed import set_distributed_options
+from Finetuning_CodeT5.util import set_global_seeds
+from Finetuning_CodeT5.metrics import compute_metrics
 
-from codet5_finetune.data import (
+from Finetuning_CodeT5.data import (
     DataCollatorNTP,
     StoppingCriteriaTokenIds,
 )
