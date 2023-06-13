@@ -9,7 +9,7 @@ This directory contains code and instructions in support of our NeurIPS 2023 sub
 - [Datasets](https://huggingface.co/docs/datasets/index)
 - [NumPy](http://www.numpy.org/)
 - [pandas](https://pandas.pydata.org/)
-- [tqdm] (https://tqdm.github.io/)
+- [tqdm](https://tqdm.github.io/)
 
 # Data
 
